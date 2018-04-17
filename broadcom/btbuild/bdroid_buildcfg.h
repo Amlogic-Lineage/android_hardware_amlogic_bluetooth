@@ -19,9 +19,13 @@
 
 #define BLE_VND_INCLUDED TRUE
 
+#define BTA_DM_COD {0x20, BTM_COD_MAJOR_AUDIO, BTM_COD_MINOR_SET_TOP_BOX}
+
+#define BTA_AV_SINK_INCLUDED TRUE
+
 // Turn off BLE_PRIVACY_SPT.  Remote reconnect fails on
 // often if this is enabled.
-#define BLE_PRIVACY_SPT FALSE
+#define BLE_PRIVACY_SPT TRUE
 
 /* minimum acceptable connection interval */
 #define BTM_BLE_CONN_INT_MIN_LIMIT 0x0006  /*7.5ms=6*1.25*/
