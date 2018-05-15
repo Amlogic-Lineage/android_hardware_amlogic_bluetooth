@@ -560,7 +560,7 @@ void rtk_btservice_internal_event_intercept(uint8_t *p_full_msg,uint8_t *p_msg)
 static int socket_accept(socketfd)
 {
     struct sockaddr_un un;
-    int len;
+    socklen_t len;
     int client_sock=0;
     len = sizeof(un);
     struct epoll_event event;

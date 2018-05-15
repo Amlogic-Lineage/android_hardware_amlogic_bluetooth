@@ -63,6 +63,7 @@
 **  Extern functions
 ******************************************************************************/
 extern char rtkbt_transtype;
+extern void Heartbeat_cleanup();
 
 /******************************************************************************
 **  Local type definitions
@@ -484,6 +485,7 @@ void userial_vendor_close(void)
     userial_socket_close();
     userial_uart_close();
     userial_coex_close();
+    Heartbeat_cleanup();
     RTK_btservice_destroyed();
 
     vnd_userial.fd = -1;
@@ -649,7 +651,7 @@ static uint16_t h4_int_transmit_data(uint8_t *data, uint16_t total_length) {
         case 0:
             // If we wrote nothing, don't loop more because we
             // can't go to infinity or beyond, ohterwise H5 can resend data
-            ALOGE("%s, ret %d", __func__, ret);
+            ALOGE("%s, ret %zd", __func__, ret);
             goto done;
         default:
             transmitted_length += ret;
@@ -1230,9 +1232,10 @@ static void userial_handle_cmd(unsigned char * recv_buffer, int total_length)
         case HCI_BLE_WRITE_SCAN_PARAMS :
             scan_int = *(uint16_t*)&recv_buffer[4];
             scan_win = *(uint16_t*)&recv_buffer[6];
-            if(scan_win > 20){
-                *(uint16_t*)&recv_buffer[4] = (scan_int * 20) / scan_win;
-                *(uint16_t*)&recv_buffer[6] = 20;
+            //ALOGE("scan_int = %d, scan_win = %d",scan_int,scan_win);
+            if(scan_win > 0x10){
+                *(uint16_t*)&recv_buffer[4] = (scan_int * 0x10) / scan_win;
+                *(uint16_t*)&recv_buffer[6] = 0x10;
             }
         break;
 
@@ -1425,7 +1428,7 @@ static uint16_t h5_int_transmit_data_cb(serial_data_type_t type, uint8_t *data, 
         case 0:
             // If we wrote nothing, don't loop more because we
             // can't go to infinity or beyond, ohterwise H5 can resend data
-            ALOGE("%s, ret %d", __func__, ret);
+            ALOGE("%s, ret %zd", __func__, ret);
             goto done;
         default:
             transmitted_length += ret;
@@ -1445,7 +1448,10 @@ static void userial_handle_event(unsigned char * recv_buffer, int total_length)
     uint8_t event;
     uint8_t *p_data = recv_buffer;
     event = p_data[0];
-	ALOGD("total_length %d",total_length);
+    if(total_length == 0)
+    {
+        ALOGD("total_length %d",total_length);
+    }
 #ifdef CONFIG_SCO_OVER_HCI
     if(event == HCI_ESCO_CONNECTION_COMP_EVT) {
         if(p_data[2] != 0) {
@@ -1488,7 +1494,10 @@ static void userial_enqueue_sco_data(unsigned char * recv_buffer, int total_leng
     sco_handle = *((uint16_t *)p_data);
     uint16_t current_pos = sco_cb.current_pos;
     uint16_t sco_packet_len = sco_cb.sco_packet_len;
-	ALOGD("total_length = %d",total_length);
+    if(total_length == 0)
+    {
+        ALOGD("total_length %d",total_length);
+    }
     if(sco_handle == sco_cb.sco_handle) {
         sco_length = p_data[SCO_PREAMBLE_SIZE - 1];
         p_data += SCO_PREAMBLE_SIZE;
@@ -1915,7 +1924,7 @@ int userial_socket_open()
     vnd_userial.cpoll_fd = epoll_create(64);
     assert (vnd_userial.cpoll_fd != -1);
 
-    vnd_userial.event_fd = eventfd(SIZE_MAX, EFD_NONBLOCK);
+    vnd_userial.event_fd = eventfd(10, EFD_NONBLOCK);
     assert(vnd_userial.event_fd != -1);
     if(vnd_userial.event_fd != -1) {
         rtk_coex_object.fd = vnd_userial.event_fd;

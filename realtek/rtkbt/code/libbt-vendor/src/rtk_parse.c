@@ -271,6 +271,8 @@ typedef struct HCI_EVENT_BT_INFO_CONTROL {
     uint8_t     autoreport_enable;
 }tHCI_EVENT_BT_INFO_CONTROL;
 
+extern void Heartbeat_init();
+
 tRTK_PROF rtk_prof;
 volatile int poweroff_allowed = 0;
 uint8_t coex_log_enable = 0;
@@ -2262,6 +2264,10 @@ static void rtk_handle_cmd_complete_evt(uint8_t*p, uint8_t len)
 
         case HCI_VENDOR_MAILBOX_CMD:
             rtk_handle_vender_mailbox_cmp_evt(p, len);
+            break;
+
+        case HCI_SET_EVENT_MASK:
+            Heartbeat_init();
             break;
 
         case HCI_VENDOR_ADD_BITPOOL_FW:
