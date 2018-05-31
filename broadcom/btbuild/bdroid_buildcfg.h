@@ -27,6 +27,9 @@
 // often if this is enabled.
 #define BLE_PRIVACY_SPT TRUE
 
+#define BTM_BLE_CONN_INT_MIN_DEF     0x06
+#define BTM_BLE_CONN_INT_MAX_DEF     0x06
+#define BTM_BLE_CONN_TIMEOUT_DEF     200
 /* minimum acceptable connection interval */
 #define BTM_BLE_CONN_INT_MIN_LIMIT 0x0006  /*7.5ms=6*1.25*/
 
