@@ -128,6 +128,7 @@ typedef struct
 }sco_cb_t;
 #endif
 
+static uint8_t filter_flag = 0;
 /******************************************************************************
 **  Static functions
 ******************************************************************************/
@@ -467,7 +468,7 @@ static void userial_coex_close(void)
 void userial_vendor_close(void)
 {
     //int result;
-
+    RTK_btservice_destroyed();
     if (vnd_userial.fd == -1)
         return;
 
@@ -486,7 +487,7 @@ void userial_vendor_close(void)
     userial_uart_close();
     userial_coex_close();
     Heartbeat_cleanup();
-    RTK_btservice_destroyed();
+    
 
     vnd_userial.fd = -1;
     vnd_userial.btdriver_state = false;
@@ -1442,6 +1443,36 @@ done:;
 
 }
 
+static void userial_filter_handle_event(unsigned char * recv_buffer, int total_length)
+{
+    uint8_t event;
+    uint8_t sub_event;
+    uint8_t adv_type;
+    uint8_t *p_data = recv_buffer;
+    event = p_data[0];
+    if(total_length == 0)
+    {
+        ALOGD("total_length %d",total_length);
+    }
+
+    switch (event)
+    {
+        case 0x3E:
+        {
+            sub_event = p_data[2];
+            if(sub_event == HCI_BLE_ADV_PKT_RPT_EVT)
+            {
+                adv_type = p_data[4];
+                if(adv_type == 0x01) // ADV_DIRECT_IND;
+                {
+                    ALOGD("Filter ADV_DIRECT_IND");
+                    filter_flag = 1;
+                }
+            }
+        }
+    }
+}
+
 #ifdef RTK_HANDLE_EVENT
 static void userial_handle_event(unsigned char * recv_buffer, int total_length)
 {
@@ -1664,6 +1695,7 @@ static int userial_handle_recv_data(unsigned char * recv_buffer, int total_lengt
             switch (recv_packet_current_type) {
                 case DATA_TYPE_EVENT :
                     userial_handle_event(received_resvered_header, received_resvered_length);
+                    userial_filter_handle_event(received_resvered_header, received_resvered_length);
                 break;
 
                 case DATA_TYPE_SCO :
@@ -1706,6 +1738,11 @@ static void h5_data_ready_cb(serial_data_type_t type, unsigned int total_length)
         read_length += userial_handle_recv_data(buffer + read_length, real_length - read_length);
     }while(read_length < total_length);
 #endif
+    if(filter_flag == 1)
+    {
+        filter_flag = 0;
+        goto done;
+    }
 
     while (length > 0) {
         ssize_t ret;
@@ -1743,6 +1780,12 @@ static void userial_recv_uart_rawdata(unsigned char *buffer, unsigned int total_
 
     }while(read_length < total_length);
 #endif
+    if(filter_flag == 1)
+    {
+        filter_flag = 0;
+        goto done;
+    }
+
     while (length > 0) {
         ssize_t ret;
         RTK_NO_INTR(ret = write(vnd_userial.uart_fd[1], buffer + transmitted_length, length));

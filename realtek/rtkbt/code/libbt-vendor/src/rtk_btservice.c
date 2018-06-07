@@ -353,58 +353,63 @@ static void *cmdready_thread()
         sem_wait(&rtk_btservice->cmdqueue_sem);
         sem_wait(&rtk_btservice->cmdsend_sem);
 
-        pthread_mutex_lock(&rtk_btservice->cmdqueue_mutex);
-        RT_LIST_ENTRY* iter = ListGetTop(&(rtk_btservice->cmdqueue_list));
-        Rtkqueuedata* desc = NULL;
-        if (iter) {
-            desc = LIST_ENTRY(iter, Rtkqueuedata, list);
-            if (desc)
-            {
-                ListDeleteNode(&desc->list);
+        if(rtk_btservice->cmdqueue_thread_running != 0)
+        {
+            pthread_mutex_lock(&rtk_btservice->cmdqueue_mutex);
+            RT_LIST_ENTRY* iter = ListGetTop(&(rtk_btservice->cmdqueue_list));
+            Rtkqueuedata* desc = NULL;
+            if (iter) {
+                desc = LIST_ENTRY(iter, Rtkqueuedata, list);
+                if (desc)
+                {
+                    ListDeleteNode(&desc->list);
+                }
             }
+
+            pthread_mutex_unlock(&rtk_btservice->cmdqueue_mutex);
+
+            if(desc) {
+                HC_BT_HDR  *p_buf = NULL;
+                p_buf = (HC_BT_HDR *) bt_vendor_cbacks->alloc(BT_HC_HDR_SIZE + HCI_CMD_PREAMBLE_SIZE + desc->parameter_len);
+
+                if(NULL == p_buf)
+                {
+                    ALOGE("rtk_vendor_cmd_to_fw: HC_BT_HDR alloc error");
+                    pthread_exit(0);
+                }
+                p_buf->event = MSG_STACK_TO_HC_HCI_CMD;
+                p_buf->offset = 0;
+                p_buf->len = HCI_CMD_PREAMBLE_SIZE + desc->parameter_len;
+                p_buf->layer_specific = 0;
+
+                uint8_t *p = (uint8_t *) (p_buf + 1);
+                UINT16_TO_STREAM(p, desc->opcode);
+                *p++ = desc->parameter_len;
+
+                if(desc->opcode == 0xfc77)
+                {
+                    rtk_btservice->autopair_fd = desc->client_sock;
+                }
+
+                if(desc->parameter_len > 0)
+                {
+                    memcpy(p, desc->parameter, desc->parameter_len);
+                }
+                if(desc->opcode != 0xfc94 )
+                    ALOGD("%s, transmit_command Opcode:%x",__func__, desc->opcode);
+                rtk_btservice->current_client_sock = desc->client_sock;
+                rtk_btservice->current_complete_cback = desc->complete_cback;
+                //bt_vendor_cbacks->xmit_cb(desc->opcode, p_buf, desc->complete_cback);
+                if(bt_vendor_cbacks != NULL)
+                {
+                    bt_vendor_cbacks->xmit_cb(desc->opcode, p_buf, Rtk_Service_Cmd_Event_Cback);
+                    hcicmd_start_reply_timer();
+                }
+                if(desc->parameter_len > 0)
+                    free(desc->parameter);
+            }
+            free(desc);
         }
-
-        pthread_mutex_unlock(&rtk_btservice->cmdqueue_mutex);
-
-        if(desc) {
-            HC_BT_HDR  *p_buf = NULL;
-            p_buf = (HC_BT_HDR *) bt_vendor_cbacks->alloc(BT_HC_HDR_SIZE + HCI_CMD_PREAMBLE_SIZE + desc->parameter_len);
-
-            if(NULL == p_buf)
-            {
-                ALOGE("rtk_vendor_cmd_to_fw: HC_BT_HDR alloc error");
-                pthread_exit(0);
-            }
-            p_buf->event = MSG_STACK_TO_HC_HCI_CMD;
-            p_buf->offset = 0;
-            p_buf->len = HCI_CMD_PREAMBLE_SIZE + desc->parameter_len;
-            p_buf->layer_specific = 0;
-
-            uint8_t *p = (uint8_t *) (p_buf + 1);
-            UINT16_TO_STREAM(p, desc->opcode);
-            *p++ = desc->parameter_len;
-
-            if(desc->opcode == 0xfc77)
-            {
-                rtk_btservice->autopair_fd = desc->client_sock;
-            }
-
-            if(desc->parameter_len > 0)
-            {
-                memcpy(p, desc->parameter, desc->parameter_len);
-            }
-            if(desc->opcode != 0xfc94 )
-                ALOGD("%s, transmit_command Opcode:%x",__func__, desc->opcode);
-            rtk_btservice->current_client_sock = desc->client_sock;
-            rtk_btservice->current_complete_cback = desc->complete_cback;
-            //bt_vendor_cbacks->xmit_cb(desc->opcode, p_buf, desc->complete_cback);
-            bt_vendor_cbacks->xmit_cb(desc->opcode, p_buf, Rtk_Service_Cmd_Event_Cback);
-            hcicmd_start_reply_timer();
-            if(desc->parameter_len > 0)
-                free(desc->parameter);
-        }
-
-        free(desc);
     }
     pthread_exit(0);
 }
@@ -593,22 +598,25 @@ static void *epoll_thread()
 
     while(rtk_btservice->epoll_thread_running)
     {
-        nfds=epoll_wait(rtk_btservice->epoll_fd,events,32,1000);
-        if(nfds>0)
+        nfds=epoll_wait(rtk_btservice->epoll_fd,events,32,500);
+        if(rtk_btservice->epoll_thread_running != 0)
         {
-            for(i=0;i<nfds;i++)
+            if(nfds>0)
             {
-                if(events[i].data.fd == rtk_btservice->socketfd && events[i].events&EPOLLIN)
+                for(i=0;i<nfds;i++)
                 {
-                    if(socket_accept(events[i].data.fd)<0)
+                    if(events[i].data.fd == rtk_btservice->socketfd && events[i].events&EPOLLIN)
                     {
-                        pthread_exit(0);
+                        if(socket_accept(events[i].data.fd)<0)
+                        {
+                            pthread_exit(0);
+                        }
                     }
-                }
-                else if(events[i].events&(EPOLLIN | EPOLLHUP | EPOLLRDHUP | EPOLLERR))
-                {
-                    ALOGD("%s events[i].data.fd = %d ", __func__, events[i].data.fd);
-                    Getpacket(events[i].data.fd);
+                    else if(events[i].events&(EPOLLIN | EPOLLHUP | EPOLLRDHUP | EPOLLERR))
+                    {
+                        ALOGD("%s events[i].data.fd = %d ", __func__, events[i].data.fd);
+                        Getpacket(events[i].data.fd);
+                    }
                 }
             }
         }
@@ -683,10 +691,15 @@ int RTK_btservice_thread_start()
 
 void RTK_btservice_thread_stop()
 {
+    ALOGD("%s !", __func__);
     rtk_btservice->epoll_thread_running=0;
     rtk_btservice->cmdqueue_thread_running=0;
     sem_post(&rtk_btservice->cmdqueue_sem);
     sem_post(&rtk_btservice->cmdsend_sem);
+    pthread_join(rtk_btservice->cmdreadythd, NULL);
+    pthread_join(rtk_btservice->epollthd, NULL);
+    close(rtk_btservice->epoll_fd);
+    ALOGD("%s end!", __func__);
 }
 
 int RTK_btservice_init()

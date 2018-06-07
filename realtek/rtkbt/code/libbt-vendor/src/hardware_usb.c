@@ -636,6 +636,7 @@ void hw_usb_config_cback(void *p_mem)
                         is_proceeding = FALSE;
                         break;
                     }
+                    hw_cfg_cb.config_len = rtk_usb_get_bt_config(&hw_cfg_cb.config_buf, prtk_usb_patch_file_info->config_name, prtk_usb_patch_file_info->mac_offset);
                     hw_cfg_cb.fw_len = rtk_get_bt_firmware(&hw_cfg_cb.fw_buf, prtk_usb_patch_file_info->patch_name);
                     rtk_usb_get_fw_version(&hw_cfg_cb);
 

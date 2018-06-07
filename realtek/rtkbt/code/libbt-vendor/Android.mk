@@ -21,7 +21,6 @@ LOCAL_SRC_FILES := \
         src/rtk_heartbeat.c \
         src/rtk_poll.c \
         src/rtk_btsnoop_net.c \
-        src/rtk_btsnoop_net.c \
         src/FallthroughBTA.cpp
 
 LOCAL_C_INCLUDES += \
