@@ -33,6 +33,8 @@
 /* minimum acceptable connection interval */
 #define BTM_BLE_CONN_INT_MIN_LIMIT 0x0006  /*7.5ms=6*1.25*/
 
+#define BTM_BLE_SCAN_SLOW_INT_1 96
+
 /*fix r311&r321 bt not open*/
 #define KERNEL_MISSING_CLOCK_BOOTTIME_ALARM TRUE
 
