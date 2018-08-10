@@ -27,6 +27,8 @@
 
 #define LOG_TAG "bt_vnd_conf"
 
+#include <stdio.h>
+#include <unistd.h>
 #include <utils/Log.h>
 #include <string.h>
 #include "bt_vendor_brcm.h"

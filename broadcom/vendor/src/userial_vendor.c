@@ -26,6 +26,7 @@
 
 #define LOG_TAG "bt_userial_vendor"
 
+#include <unistd.h>
 #include <utils/Log.h>
 #include <termios.h>
 #include <fcntl.h>

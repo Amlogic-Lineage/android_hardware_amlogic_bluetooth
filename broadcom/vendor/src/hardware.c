@@ -28,6 +28,7 @@
 
 #define LOG_TAG "bt_hwcfg"
 
+#include <unistd.h>
 #include <utils/Log.h>
 #include <sys/types.h>
 #include <sys/stat.h>
