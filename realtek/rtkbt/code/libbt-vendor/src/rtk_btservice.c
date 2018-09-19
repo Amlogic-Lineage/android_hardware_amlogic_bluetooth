@@ -127,7 +127,7 @@ typedef struct Rtk_Queue_Data
     void            (*complete_cback)(void *);
 }Rtkqueuedata;
 
-static Rtk_Btservice_Info *rtk_btservice;
+static Rtk_Btservice_Info *rtk_btservice = NULL;
 static void Rtk_Service_Send_Hwerror_Event();
 //extern void userial_recv_rawdata_hook(unsigned char *, unsigned int);
 static timer_t OsAllocateTimer(tTIMER_HANDLE_CBACK timer_callback)
@@ -292,6 +292,11 @@ static void Rtk_Client_Cmd_Cback(void *p_mem)
 void Rtk_Service_Vendorcmd_Hook(Rtk_Service_Data *RtkData, int client_sock)
 {
     Rtkqueuedata* rtkqueue_data = NULL;
+    if(!rtk_btservice) {
+        ALOGE("rtkbt service is NULL");
+        return;
+    }
+
     pthread_mutex_lock(&rtk_btservice->cmdqueue_mutex);
     rtkqueue_data = (Rtkqueuedata *)malloc(sizeof(Rtkqueuedata));
     if (NULL == rtkqueue_data)
@@ -334,14 +339,14 @@ static void Rtk_Service_Cmd_Event_Cback(void *p_mem)
 
 static void Rtk_Service_Send_Hwerror_Event()
 {
-    unsigned char *p_buf=(unsigned char *)malloc(sizeof(char)*4);
-    int length=4;
-    p_buf[0]=0x04;//event
-    p_buf[1]=0x10;//hardware error
-    p_buf[2]=0x01;//len
-    p_buf[3]=0xfd;//error code
+    unsigned char p_buf[4];
+    int length = 4;
+    p_buf[0] = 0x04;//event
+    p_buf[1] = 0x10;//hardware error
+    p_buf[2] = 0x01;//len
+    p_buf[3] = 0xfd;//rtkbtservice error code
     userial_recv_rawdata_hook(p_buf,length);
-    free(p_buf);
+
 }
 
 static void *cmdready_thread()
@@ -708,7 +713,7 @@ int RTK_btservice_init()
     rtk_btservice=(Rtk_Btservice_Info *)malloc(sizeof(Rtk_Btservice_Info));
 
     rtk_btservice->current_client_sock = -1;
-    rtk_btservice->current_complete_cback=NULL;
+    rtk_btservice->current_complete_cback = NULL;
     rtk_btservice->autopair_fd = -1;
     ALOGD("%s init start!", __func__);
     hcicmd_alloc_reply_timer();
@@ -748,9 +753,9 @@ int RTK_btservice_init()
 
 void RTK_btservice_destroyed()
 {
-    ALOGD("%s destroyed start!", __func__);
     RTK_btservice_thread_stop();
     close(rtk_btservice->socketfd);
+    rtk_btservice->socketfd = -1;
     sem_destroy(&rtk_btservice->cmdqueue_sem);
     sem_destroy(&rtk_btservice->cmdsend_sem);
     flush_cmdqueue_hash(rtk_btservice);
@@ -759,6 +764,7 @@ void RTK_btservice_destroyed()
     rtk_btservice->autopair_fd = -1;
     rtk_btservice->current_client_sock = -1;
     free(rtk_btservice);
+    rtk_btservice = NULL;
     ALOGD("%s destroyed done!", __func__);
 }
 

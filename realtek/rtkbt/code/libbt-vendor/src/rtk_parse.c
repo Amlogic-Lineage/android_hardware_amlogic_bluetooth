@@ -33,7 +33,7 @@
 *
 ******************************************************************************/
 #define LOG_TAG "rtk_parse"
-#define RTKBT_RELEASE_NAME "20180702_BT_ANDROID_9.0"
+#define RTKBT_RELEASE_NAME	"Test"
 
 #include <utils/Log.h>
 #include <stdlib.h>
@@ -63,7 +63,7 @@
 #include "rtk_parse.h"
 #include <sys/syscall.h>
 
-#define RTK_VERSION "2.1"
+#define RTK_VERSION "3.0"
 
 char invite_req[] = "INVITE_REQ";
 char invite_rsp[] = "INVITE_RSP";
@@ -223,7 +223,7 @@ typedef struct RTK_PROF {
     RT_LIST_HEAD    coex_list;
     pthread_mutex_t profile_mutex;
     pthread_mutex_t coex_mutex;
-    pthread_mutex_t udpsocket_mutex;
+    pthread_mutex_t btwifi_mutex;
     pthread_t thread_monitor;
     pthread_t thread_data;
     timer_t  timer_a2dp_packet_count;
@@ -247,15 +247,17 @@ typedef struct RTK_PROF {
     uint8_t  autoreport;
     uint8_t  polling_enable;
     uint8_t  polling_interval;
-    volatile uint8_t udpsocket_recv_thread_running;
+    volatile uint8_t coex_recv_thread_running;
     //int32_t   nlsocket;
-    int32_t   udpsocket;
+    int32_t  btcoex_chr;
+    int32_t  udpsocket;
     uint8_t  piconet_id;
     uint8_t  mode;
     uint8_t  afh_map[10];
     uint16_t hci_reversion;
     uint16_t lmp_subversion;
     uint8_t  wifi_on;
+    uint8_t  bt_on;
     //uint8_t  le_profile_index;
 }tRTK_PROF;
 
@@ -271,8 +273,6 @@ typedef struct HCI_EVENT_BT_INFO_CONTROL {
     uint8_t     autoreport_enable;
 }tHCI_EVENT_BT_INFO_CONTROL;
 
-extern void Heartbeat_init();
-
 tRTK_PROF rtk_prof;
 volatile int poweroff_allowed = 0;
 uint8_t coex_log_enable = 0;
@@ -283,6 +283,8 @@ static volatile bool coex_cmd_send = false;
 #define is_profile_busy(profile)        ((rtk_prof.profile_status & BIT(profile)) >0)
 
 static void timeout_handler(int signo, siginfo_t * info, void *context);
+static int coex_msg_send(char *tx_msg, int msg_size);
+static int coex_msg_recv(uint8_t *recv_msg, uint8_t *msg_size);
 
 #ifndef RTK_PARSE_LOG_BUF_SIZE
 #define RTK_PARSE_LOG_BUF_SIZE  1024
@@ -832,8 +834,10 @@ static void rtk_cmd_complete_cback(void *p_mem)
 
 void rtk_vendor_cmd_to_fw(uint16_t opcode, uint8_t parameter_len, uint8_t* parameter)
 {
-    //uint8_t temp = 0;
     HC_BT_HDR  *p_buf = NULL;
+
+    if(!rtk_prof.bt_on)
+        return;
 
     if(bt_vendor_cbacks)
         p_buf = (HC_BT_HDR *) bt_vendor_cbacks->alloc(BT_HC_HDR_SIZE + HCI_CMD_PREAMBLE_SIZE + parameter_len);
@@ -872,6 +876,7 @@ void rtk_vendor_cmd_to_fw(uint16_t opcode, uint8_t parameter_len, uint8_t* param
             if (NULL == pcoex_info)
             {
                 ALOGE("rtk_vendor_cmd_to_fw: allocate error");
+                pthread_mutex_unlock(&rtk_prof.coex_mutex);
                 return;
             }
 
@@ -1454,8 +1459,8 @@ int udpsocket_recv(uint8_t *recv_msg, uint8_t *msg_size)
     bzero(buf, MAX_PAYLOAD);
 
     while (poll(&pfd, 1, 1000) <= 0) {
-        if (rtk_prof.udpsocket_recv_thread_running ==0) {
-            RtkLogMsg("SIGUSR2 should have caught us before this");
+        if (rtk_prof.coex_recv_thread_running ==0) {
+            RtkLogMsg("%s, SIGUSR2 should have caught us before this", __func__);
             return -1;
         }
     }
@@ -1468,6 +1473,57 @@ int udpsocket_recv(uint8_t *recv_msg, uint8_t *msg_size)
     } else {
         *msg_size = n;
         memcpy(recv_msg,buf,n);
+    }
+    return 0;
+}
+
+
+int btcoex_chr_send(char *tx_msg, int msg_size)
+{
+    int n; /* message byte size */
+
+    RtkLogMsg("btcoex_chr_send tx_msg:%s",tx_msg);
+    RTK_NO_INTR (n = write(rtk_prof.btcoex_chr, tx_msg, msg_size));
+    if (n < 0)
+    {
+        ALOGE("ERROR in write");
+        return -1;
+    }
+    return n;
+}
+
+int btcoex_chr_recv(uint8_t *recv_msg, uint8_t *msg_size)
+{
+    char buf[MAX_PAYLOAD];  /* message buf */
+    int n = -1;                  /* message byte size */
+    struct pollfd pfd = {
+        .events = POLLPRI|POLLIN|POLLHUP|POLLERR|POLLRDHUP,
+        .revents = 0,
+        .fd = rtk_prof.btcoex_chr
+    };
+
+    bzero(buf, MAX_PAYLOAD);
+
+    while (poll(&pfd, 1, 1000) <= 0) {
+        if (rtk_prof.coex_recv_thread_running == 0) {
+            RtkLogMsg("%s, SIGUSR2 should have caught us before this", __func__);
+            return -1;
+        }
+    }
+
+    if (pfd.revents & POLLIN) {
+        RTK_NO_INTR(n = read(rtk_prof.btcoex_chr, buf, MAX_PAYLOAD));
+        if (n < 0) {
+            ALOGE("ERROR in recvfrom");
+            return -1;
+        } else {
+            *msg_size = n;
+            memcpy(recv_msg, buf, n);
+        }
+    }
+    else {
+        ALOGE("rtk_btcoex is wrong");
+        return -1;
     }
     return 0;
 }
@@ -1485,7 +1541,7 @@ void rtk_notify_extension_version_to_wifi()
     *p++ = para_length;
     UINT16_TO_STREAM(p, HCI_EXTENSION_VERSION);
     RtkLogMsg("extension version is 0x%x", HCI_EXTENSION_VERSION);
-    if(udpsocket_send(p_buf, para_length + HCI_CMD_PREAMBLE_SIZE) < 0)
+    if(coex_msg_send(p_buf, para_length + HCI_CMD_PREAMBLE_SIZE) < 0)
         ALOGE("rtk_notify_extension_version_to_wifi: udpsocket send error");
 }
 
@@ -1504,7 +1560,7 @@ void rtk_notify_btpatch_version_to_wifi()
     UINT16_TO_STREAM(p, rtk_prof.lmp_subversion);
     RtkLogMsg("btpatch_version, length is 0x%x, hci_reversion is 0x%x, lmp_subversion is %x", para_length, rtk_prof.hci_reversion, rtk_prof.lmp_subversion);
 
-    if(udpsocket_send(p_buf, para_length + HCI_CMD_PREAMBLE_SIZE) < 0)
+    if(coex_msg_send(p_buf, para_length + HCI_CMD_PREAMBLE_SIZE) < 0)
         ALOGE("rtk_notify_btpatch_version_to_wifi: udpsocket send error");
 }
 
@@ -1529,7 +1585,7 @@ void rtk_notify_afhmap_to_wifi()
     for(kk=0; kk < 10; kk++)
         RtkLogMsg("afhmap data[%d] is 0x%x", kk, rtk_prof.afh_map[kk]);
 
-    if(udpsocket_send(p_buf, para_length + HCI_CMD_PREAMBLE_SIZE) < 0)
+    if(coex_msg_send(p_buf, para_length + HCI_CMD_PREAMBLE_SIZE) < 0)
         ALOGE("rtk_notify_afhmap_to_wifi: udpsocket send error");
 }
 
@@ -1552,7 +1608,7 @@ void rtk_notify_btcoex_to_wifi(uint8_t opcode, uint8_t status)
 
     RtkLogMsg("btcoex, opcode is 0x%x, status is 0x%x", opcode, status);
 
-    if(udpsocket_send(p_buf, para_length + HCI_CMD_PREAMBLE_SIZE) < 0)
+    if(coex_msg_send(p_buf, para_length + HCI_CMD_PREAMBLE_SIZE) < 0)
         ALOGE("rtk_notify_btcoex_to_wifi: udpsocket send error");
 }
 
@@ -1580,7 +1636,7 @@ void rtk_notify_btoperation_to_wifi(uint8_t operation, uint8_t append_data_lengt
             RtkLogMsg("append data is 0x%x", *(append_data+kk));
     }
 
-    if(udpsocket_send(p_buf, para_length + HCI_CMD_PREAMBLE_SIZE) < 0)
+    if(coex_msg_send(p_buf, para_length + HCI_CMD_PREAMBLE_SIZE) < 0)
         ALOGE("rtk_notify_btoperation_to_wifi: udpsocket send error");
 }
 
@@ -1612,7 +1668,7 @@ void rtk_notify_info_to_wifi(uint8_t reason, uint8_t length, uint8_t* report_inf
             RtkLogMsg("bt info[%d]: %02x", i, report_info[i]);
     }
 
-    if(udpsocket_send(p_buf, para_length + HCI_CMD_PREAMBLE_SIZE) < 0)
+    if(coex_msg_send(p_buf, para_length + HCI_CMD_PREAMBLE_SIZE) < 0)
         ALOGE("rtk_notify_info_to_wifi: udpsocket send error");
 }
 
@@ -1634,7 +1690,7 @@ void rtk_notify_regester_to_wifi(uint8_t* reg_value)
     RtkLogMsg("bt register, register offset is %x", reg->offset);
     RtkLogMsg("bt register, register value is %x", reg->value);
 
-    if(udpsocket_send(p_buf, para_length + HCI_CMD_PREAMBLE_SIZE) < 0)
+    if(coex_msg_send(p_buf, para_length + HCI_CMD_PREAMBLE_SIZE) < 0)
         ALOGE("rtk_notify_regester_to_wifi: udpsocket send error");
 }
 
@@ -1812,7 +1868,7 @@ void rtk_handle_event_from_wifi(uint8_t* msg)
     {
         RtkLogMsg("receive attend req from wifi, wifi turn on");
         rtk_prof.wifi_on = 1;
-        udpsocket_send(attend_ack, sizeof(attend_ack));
+        coex_msg_send(attend_ack, sizeof(attend_ack));
         rtk_notify_extension_version_to_wifi();
     }
 
@@ -1820,7 +1876,7 @@ void rtk_handle_event_from_wifi(uint8_t* msg)
     {
         RtkLogMsg("receive wifi leave from wifi, wifi turn off");
         rtk_prof.wifi_on = 0;
-        udpsocket_send(leave_ack, sizeof(leave_ack));
+        coex_msg_send(leave_ack, sizeof(leave_ack));
         if(rtk_prof.polling_enable)
         {
             rtk_prof.polling_enable = 0;
@@ -1874,15 +1930,16 @@ void rtk_handle_event_from_wifi(uint8_t* msg)
     }
 }
 
-static void udpsocket_receive_thread_exit_handler(int sig)
+static void coex_receive_thread_exit_handler(int sig)
 {
     RtkLogMsg("USR2, this signal is %d \n", sig);
     usleep(100);
     pthread_exit(0);
 }
 
-static void udpsocket_receive_thread()//(void *arg)
+static void btwifi_coex_receive_thread(void *arg)
 {
+    RTK_UNUSED(arg);
     uint8_t msg_recv[MAX_PAYLOAD];
     uint8_t recv_length;
     struct sigaction actions;
@@ -1890,21 +1947,21 @@ static void udpsocket_receive_thread()//(void *arg)
     memset(&actions, 0, sizeof(actions));
     sigemptyset(&actions.sa_mask);
     actions.sa_flags = 0;
-    actions.sa_handler = udpsocket_receive_thread_exit_handler;
+    actions.sa_handler = coex_receive_thread_exit_handler;
 
     sigaction(SIGUSR2,&actions,NULL);//int rc = sigaction(SIGUSR2,&actions,NULL);
 
-    RtkLogMsg("udpsocket_receive_thread started");
-    prctl(PR_SET_NAME, (unsigned long)"udpsocket_receive_thread", 0, 0, 0);
+    RtkLogMsg("btwifi_coex_receive_thread started");
+    prctl(PR_SET_NAME, (unsigned long)"btwifi_coex_receive_thread", 0, 0, 0);
 
-    while(rtk_prof.udpsocket_recv_thread_running)
+    while(rtk_prof.coex_recv_thread_running)
     {
         memset(msg_recv, 0 , MAX_PAYLOAD);
-        if (udpsocket_recv(msg_recv, &recv_length) == 0)
+        if (coex_msg_recv(msg_recv, &recv_length) == 0)
             rtk_handle_event_from_wifi(msg_recv);
     }
 
-    RtkLogMsg("udpsocket_receive_thread exiting");
+    RtkLogMsg("btwifi_coex_receive_thread exiting");
     pthread_exit(NULL);
 }
 
@@ -1915,27 +1972,27 @@ int create_udpsocket_socket()
 
     RtkLogMsg("create udpsocket port: %d\n", portno);
 
-    pthread_mutex_lock(&rtk_prof.udpsocket_mutex);
+    pthread_mutex_lock(&rtk_prof.btwifi_mutex);
 
     pthread_attr_t thread_attr_data;
-    if (rtk_prof.udpsocket_recv_thread_running)
+    if (rtk_prof.coex_recv_thread_running)
     {
         ALOGE("udp_receive_thread already exit");
-        pthread_mutex_unlock(&rtk_prof.udpsocket_mutex);
+        pthread_mutex_unlock(&rtk_prof.btwifi_mutex);
         return -1 ;
     }
 
-    rtk_prof.udpsocket_recv_thread_running = 1;
+    rtk_prof.coex_recv_thread_running = 1;
     rtk_prof.udpsocket = socket(AF_INET, SOCK_DGRAM, 0);
     RtkLogMsg("create socket %d", rtk_prof.udpsocket);
 
     if (rtk_prof.udpsocket < 0)
     {
         ALOGE("create udpsocket error...%s\n", strerror(errno));
-        rtk_prof.udpsocket_recv_thread_running = 0;
+        rtk_prof.coex_recv_thread_running = 0;
         close(rtk_prof.udpsocket);
         RtkLogMsg("close socket %d", rtk_prof.udpsocket);
-        pthread_mutex_unlock(&rtk_prof.udpsocket_mutex);
+        pthread_mutex_unlock(&rtk_prof.btwifi_mutex);
         return -1 ;
     }
 
@@ -1955,37 +2012,37 @@ int create_udpsocket_socket()
     if (bind(rtk_prof.udpsocket, (struct sockaddr *)&rtk_prof.server_addr, sizeof(rtk_prof.server_addr)) < 0)
     {
         ALOGE("bind udpsocket error...%s\n", strerror(errno));
-        rtk_prof.udpsocket_recv_thread_running = 0;
+        rtk_prof.coex_recv_thread_running = 0;
         close(rtk_prof.udpsocket);
         RtkLogMsg("close socket %d", rtk_prof.udpsocket);
-        pthread_mutex_unlock(&rtk_prof.udpsocket_mutex);
+        pthread_mutex_unlock(&rtk_prof.btwifi_mutex);
         return -1 ;
     }
 
     pthread_attr_init(&thread_attr_data);
-    if (pthread_create(&rtk_prof.thread_data, &thread_attr_data, (void*)udpsocket_receive_thread, NULL) != 0)
+    if (pthread_create(&rtk_prof.thread_data, &thread_attr_data, (void*)btwifi_coex_receive_thread, NULL) != 0)
     {
         ALOGE("pthread_create failed!");
         pthread_attr_destroy(&thread_attr_data);
-        rtk_prof.udpsocket_recv_thread_running = 0;
-        pthread_mutex_unlock(&rtk_prof.udpsocket_mutex);
+        rtk_prof.coex_recv_thread_running = 0;
+        pthread_mutex_unlock(&rtk_prof.btwifi_mutex);
         return -1 ;
     }
     pthread_attr_destroy(&thread_attr_data);
-    pthread_mutex_unlock(&rtk_prof.udpsocket_mutex);
+    pthread_mutex_unlock(&rtk_prof.btwifi_mutex);
     return 0;
 }
 
-int stop_udpsocket_receive_thread()
+int stop_btwifi_coex_receive_thread()
 {
-    pthread_mutex_lock(&rtk_prof.udpsocket_mutex);
+    pthread_mutex_lock(&rtk_prof.btwifi_mutex);
     int result = 0;
 
     RtkLogMsg("notify wifi bt turn off");
     if(rtk_prof.wifi_on)
-        udpsocket_send(bt_leave, sizeof(bt_leave));
+        coex_msg_send(bt_leave, sizeof(bt_leave));
 
-    if (rtk_prof.udpsocket_recv_thread_running)
+    if (rtk_prof.coex_recv_thread_running)
     {
         RtkLogMsg("data thread is running, stop it");
 
@@ -1994,20 +2051,29 @@ int stop_udpsocket_receive_thread()
         {
             ALOGE("error cancelling data thread");
         }
-        rtk_prof.udpsocket_recv_thread_running = 0;
+        rtk_prof.coex_recv_thread_running = 0;
 
         if ((result = pthread_join(rtk_prof.thread_data, NULL)) < 0)
         {
             ALOGE( "data thread pthread_join() failed result:%d", result);
         }
 
-        RtkLogMsg("close socket %d", rtk_prof.udpsocket);
-        if((result = close(rtk_prof.udpsocket)) != 0)
-        {
-            ALOGE("close socket error!");
+        if(rtk_prof.udpsocket) {
+            RtkLogMsg("close socket %d", rtk_prof.udpsocket);
+            if((result = close(rtk_prof.udpsocket)) != 0)
+            {
+                ALOGE("close socket error!");
+            }
+        }
+        else if(rtk_prof.btcoex_chr) {
+            RtkLogMsg("close char device  %d", rtk_prof.btcoex_chr);
+            if((result = close(rtk_prof.btcoex_chr)) != 0)
+            {
+                ALOGE("close char device  error!");
+            }
         }
     }
-    pthread_mutex_unlock(&rtk_prof.udpsocket_mutex);
+    pthread_mutex_unlock(&rtk_prof.btwifi_mutex);
     return 0;
 }
 
@@ -2042,14 +2108,52 @@ int create_netlink_socket()
 }
 #endif
 
+int open_btcoex_chrdev()
+{
+    RtkLogMsg("open_btcoex_chrdev\n");
+
+    pthread_mutex_lock(&rtk_prof.btwifi_mutex);
+
+    pthread_attr_t thread_attr_data;
+    if (rtk_prof.coex_recv_thread_running)
+    {
+        ALOGE("udp_receive_thread already exit");
+        pthread_mutex_unlock(&rtk_prof.btwifi_mutex);
+        return -1 ;
+    }
+
+    rtk_prof.coex_recv_thread_running = 1;
+    if ((rtk_prof.btcoex_chr = open("/dev/rtk_btcoex", O_RDWR)) < 0)
+    {
+        ALOGE("open rtk_btcoex error...%s\n", strerror(errno));
+        rtk_prof.coex_recv_thread_running = 0;
+        pthread_mutex_unlock(&rtk_prof.btwifi_mutex);
+        return -1 ;
+    }
+
+    pthread_attr_init(&thread_attr_data);
+    if (pthread_create(&rtk_prof.thread_data, &thread_attr_data, (void*)btwifi_coex_receive_thread, NULL) != 0)
+    {
+        ALOGE("create coexchr_receive_thread failed!");
+        pthread_attr_destroy(&thread_attr_data);
+        rtk_prof.coex_recv_thread_running = 0;
+        pthread_mutex_unlock(&rtk_prof.btwifi_mutex);
+        return -1 ;
+    }
+    pthread_attr_destroy(&thread_attr_data);
+    pthread_mutex_unlock(&rtk_prof.btwifi_mutex);
+    return 0;
+}
+
 void rtk_parse_init(void)
 {
     ALOGI("RTKBT_RELEASE_NAME: %s",RTKBT_RELEASE_NAME);
     RtkLogMsg("rtk_profile_init, version: %s", RTK_VERSION);
 
+    memset(&rtk_prof, 0, sizeof(rtk_prof));
     pthread_mutex_init(&rtk_prof.profile_mutex, NULL);
     pthread_mutex_init(&rtk_prof.coex_mutex, NULL);
-    pthread_mutex_init(&rtk_prof.udpsocket_mutex, NULL);
+    pthread_mutex_init(&rtk_prof.btwifi_mutex, NULL);
     alloc_a2dp_packet_count_timer();
     alloc_pan_packet_count_timer();
     alloc_hogp_packet_count_timer();
@@ -2059,13 +2163,15 @@ void rtk_parse_init(void)
     init_connection_hash(&rtk_prof);
     init_coex_hash(&rtk_prof);
 
-    create_udpsocket_socket();
+    if(create_udpsocket_socket() < 0) {
+        ALOGE("UDP socket fail, try to use rtk_btcoex chrdev");
+        open_btcoex_chrdev();
+    }
 }
 
 void rtk_parse_cleanup()
 {
     RtkLogMsg("rtk_profile_cleanup");
-    int kk = 0;
     free_a2dp_packet_count_timer();
     free_pan_packet_count_timer();
     free_hogp_packet_count_timer();
@@ -2077,14 +2183,10 @@ void rtk_parse_cleanup()
     flush_coex_hash(&rtk_prof);
     pthread_mutex_destroy(&rtk_prof.coex_mutex);
 
-    stop_udpsocket_receive_thread();
-    pthread_mutex_destroy(&rtk_prof.udpsocket_mutex);
+    stop_btwifi_coex_receive_thread();
+    pthread_mutex_destroy(&rtk_prof.btwifi_mutex);
 
-    rtk_prof.polling_enable = 0;
-    rtk_prof.profile_bitmap = 0;
-    rtk_prof.profile_status = 0;
-    for(kk = 0; kk < 8; kk++)
-        rtk_prof.profile_refcount[kk] = 0;
+    memset(&rtk_prof, 0, sizeof(rtk_prof));
 }
 
 static void rtk_handle_vender_mailbox_cmp_evt(uint8_t* p, uint8_t len)
@@ -2241,7 +2343,7 @@ static void rtk_handle_cmd_complete_evt(uint8_t*p, uint8_t len)
         case HCI_RESET:
         {
             RtkLogMsg("bt start ok");
-            udpsocket_send(invite_req, sizeof(invite_req));
+            coex_msg_send(invite_req, sizeof(invite_req));
 #if 0
             if(create_netlink_socket() == 0)
             {
@@ -2252,8 +2354,6 @@ static void rtk_handle_cmd_complete_evt(uint8_t*p, uint8_t len)
             else
                 RtkLogMsg("wifi is off when bt turn on, wait for wifi turning on...");
 #endif
-            uint8_t ttmp[1] = {1};
-            rtk_vendor_cmd_to_fw(0xfc1b, 1, ttmp);
             break;
         }
 
@@ -2264,10 +2364,6 @@ static void rtk_handle_cmd_complete_evt(uint8_t*p, uint8_t len)
 
         case HCI_VENDOR_MAILBOX_CMD:
             rtk_handle_vender_mailbox_cmp_evt(p, len);
-            break;
-
-        case HCI_SET_EVENT_MASK:
-            Heartbeat_init();
             break;
 
         case HCI_VENDOR_ADD_BITPOOL_FW:
@@ -2492,6 +2588,30 @@ static void rtk_handle_le_meta_evt(uint8_t* p)
     }
 }
 
+static int coex_msg_send(char *tx_msg, int msg_size)
+{
+    int ret = -1;
+    if(rtk_prof.udpsocket > 0) {
+        ret = udpsocket_send(tx_msg, msg_size);
+    }
+    else if(rtk_prof.btcoex_chr > 0) {
+        ret = btcoex_chr_send(tx_msg, msg_size);
+    }
+    return ret;
+
+}
+
+static int coex_msg_recv(uint8_t *recv_msg, uint8_t *msg_size)
+{
+    int ret = -1;
+    if(rtk_prof.udpsocket > 0) {
+        ret = udpsocket_recv(recv_msg, msg_size);
+    }
+    else if(rtk_prof.btcoex_chr > 0) {
+        ret = btcoex_chr_recv(recv_msg, msg_size);
+    }
+    return ret;
+}
 void rtk_parse_internal_event_intercept(uint8_t *p_msg)
 {
     //ALOGE("in rtk_parse_internal_event_intercept, *p= %x", *p);
@@ -2803,6 +2923,13 @@ void rtk_add_le_data_count(uint8_t data_type)
     }
 }
 
+void rtk_set_bt_on(uint8_t bt_on) {
+    RtkLogMsg("bt stack is init");
+    rtk_prof.bt_on = bt_on;
+    uint8_t ttmp[1] = {1};
+    rtk_vendor_cmd_to_fw(0xfc1b, 1, ttmp);
+}
+
 static rtk_parse_manager_t parse_interface = {
   rtk_parse_internal_event_intercept,
   rtk_parse_l2cap_data,
@@ -2812,6 +2939,7 @@ static rtk_parse_manager_t parse_interface = {
   rtk_add_le_profile,
   rtk_delete_le_profile,
   rtk_add_le_data_count,
+  rtk_set_bt_on,
 };
 
 rtk_parse_manager_t *rtk_parse_manager_get_interface() {

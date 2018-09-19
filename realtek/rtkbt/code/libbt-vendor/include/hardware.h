@@ -175,6 +175,7 @@ typedef struct
 #define ROM_LMP_8822b               0x8822
 #define ROM_LMP_8723d               0x8723
 #define ROM_LMP_8821c               0x8821
+#define ROM_LMP_8822c               0x8822
 
 struct rtk_epatch_entry{
     uint16_t chip_id;

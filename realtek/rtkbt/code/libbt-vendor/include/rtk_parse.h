@@ -85,6 +85,8 @@ typedef struct rtk_parse_manager_t {
 
     void (*rtk_add_le_data_count)(uint8_t data_type);
 
+    void (*rtk_set_bt_on)(uint8_t bt_on);
+
 }rtk_parse_manager_t;
 
 rtk_parse_manager_t *rtk_parse_manager_get_interface();

@@ -115,6 +115,17 @@ static void load_rtkbt_heartbeat_conf()
 
 }
 
+static void rtkbt_heartbeat_send_hw_error()
+{
+    unsigned char p_buf[4];
+    int length = 4;
+    p_buf[0] = 0x04;//event
+    p_buf[1] = 0x10;//hardware error
+    p_buf[2] = 0x01;//len
+    p_buf[3] = 0xfc;//heartbeat error code
+    userial_recv_rawdata_hook(p_buf,length);
+}
+
 static void rtkbt_heartbeat_cmpl_cback (void *p_params)
 {
     uint8_t  status = 0;
@@ -138,7 +149,7 @@ static void rtkbt_heartbeat_cmpl_cback (void *p_params)
         ALOGE("rtkbt_heartbeat_cmpl_cback: Current SeqNum = %d,should SeqNum=%d, status = %d", seqnum, nextSeqNum, status);
         ALOGE("heartbeat event missing:  restart bluedroid stack\n");
         usleep(1000);
-        kill(getpid(), SIGKILL);
+        rtkbt_heartbeat_send_hw_error();
     }
    
 }

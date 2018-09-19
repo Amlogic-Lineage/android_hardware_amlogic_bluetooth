@@ -64,6 +64,7 @@
 ******************************************************************************/
 extern char rtkbt_transtype;
 extern void Heartbeat_cleanup();
+extern void Heartbeat_init();
 
 /******************************************************************************
 **  Local type definitions
@@ -282,7 +283,7 @@ void userial_vendor_init(char *bt_device_node)
         h5_int_interface->h5_int_init(&h5_int_callbacks);
     }
     rtk_parse_manager = NULL;
-    property_get("persist.bluetooth.rtkcoex", value, "true");
+    property_get("persist.vendor.bluetooth.rtkcoex", value, "true");
     if(strncmp(value, "true", 4) == 0) {
         rtk_parse_manager = rtk_parse_manager_get_interface();
         rtk_parse_manager->rtk_parse_init();
@@ -290,15 +291,32 @@ void userial_vendor_init(char *bt_device_node)
     vnd_userial.data_order = RtbQueueInit();
     vnd_userial.recv_data = RtbQueueInit();
     vnd_userial.send_data = RtbQueueInit();
+
+    //reset coex gloable variables
+    coex_packet_recv_state = RTKBT_PACKET_IDLE;
+    coex_packet_bytes_need = 0;
+    coex_current_type = 0;
+    coex_resvered_length = 0;
+
+#ifdef RTK_HANDLE_EVENT
+    //reset handle event gloable variables
+    received_packet_state = RTKBT_PACKET_IDLE;
+    received_packet_bytes_need = 0;
+    recv_packet_current_type = 0;
+    received_resvered_length = 0;
+#endif
+
 #ifdef CONFIG_SCO_OVER_HCI
     sco_cb.recv_sco_data = RtbQueueInit();
     sco_cb.send_sco_data = RtbQueueInit();
     pthread_mutex_init(&sco_cb.sco_mutex, NULL);
     pthread_cond_init(&sco_cb.sco_cond, NULL);
     memset(&sco_cb.sbc_enc, 0, sizeof(sbc_t));
-    sbc_init(&sco_cb.sbc_enc);//sbc_init(&sco_cb.sbc_enc, 0);
+    sbc_init_msbc(&sco_cb.sbc_enc, 0L);
+    sco_cb.sbc_enc.endian = SBC_LE;
     memset(&sco_cb.sbc_dec, 0, sizeof(sbc_t));
-    sbc_init(&sco_cb.sbc_dec);//sbc_init(&sco_cb.sbc_enc, 0);
+    sbc_init_msbc(&sco_cb.sbc_dec, 0L);
+    sco_cb.sbc_dec.endian = SBC_LE;
 #endif
 }
 
@@ -467,8 +485,6 @@ static void userial_coex_close(void)
 *******************************************************************************/
 void userial_vendor_close(void)
 {
-    //int result;
-    RTK_btservice_destroyed();
     if (vnd_userial.fd == -1)
         return;
 
@@ -477,17 +493,22 @@ void userial_vendor_close(void)
         /* de-assert bt_wake BEFORE closing port */
         ioctl(vnd_userial.fd, USERIAL_IOCTL_BT_WAKE_DEASSERT, NULL);
 #endif
-        h5_int_interface->h5_int_cleanup();
+        //h5_int_interface->h5_int_cleanup();
 
     }
 
     vnd_userial.thread_running = false;
 
+    Heartbeat_cleanup();
+    RTK_btservice_destroyed();
+
     userial_socket_close();
     userial_uart_close();
     userial_coex_close();
-    Heartbeat_cleanup();
-    
+
+    if((rtkbt_transtype & RTKBT_TRANS_UART) && (rtkbt_transtype & RTKBT_TRANS_H5)) {
+        h5_int_interface->h5_int_cleanup();
+    }
 
     vnd_userial.fd = -1;
     vnd_userial.btdriver_state = false;
@@ -499,6 +520,7 @@ void userial_vendor_close(void)
     sbc_finish(&sco_cb.sbc_enc);
     sbc_finish(&sco_cb.sbc_dec);
 #endif
+    ALOGD( "%s finish", __func__);
 }
 
 /*******************************************************************************
@@ -876,8 +898,9 @@ static void userial_coex_send_data_handler(unsigned char * send_buffer, int tota
     free(p_buf);
 }
 
-static void userial_coex_handler()//(void *context)
+static void userial_coex_handler(void *context)
 {
+    RTK_UNUSED(context);
     RTK_BUFFER* skb_data;
     RTK_BUFFER* skb_type;
     eventfd_t value;
@@ -916,15 +939,17 @@ static void userial_coex_handler()//(void *context)
 
 #ifdef CONFIG_SCO_OVER_HCI
 //receive sco encode data over hci, we need to decode msbc data to pcm, and send it to sco audio hal
-static void* userial_recv_sco_thread()//(void *arg)
+static void* userial_recv_sco_thread(void *arg)
 {
+    RTK_UNUSED(arg);
     RTK_BUFFER* skb_sco_data;
     unsigned char dec_data[480];
     unsigned char pcm_data[960];
     int index = 0;
     //uint16_t sco_packet_len = 60;
     uint8_t * p_data = NULL;
-    int res = 0, writen = 0;
+    int res = 0;
+    size_t writen = 0;
     prctl(PR_SET_NAME, (unsigned long)"userial_recv_sco_thread", 0, 0, 0);
     /*
     FILE *file;
@@ -985,8 +1010,9 @@ static void* userial_recv_sco_thread()//(void *arg)
     return NULL;
 }
 
-static void* userial_send_sco_thread()//(void *arg)
+static void* userial_send_sco_thread(void *arg)
 {
+    RTK_UNUSED(arg);
     unsigned char enc_data[240];
     unsigned char pcm_data[960];
     unsigned char send_data[100];
@@ -1122,8 +1148,9 @@ static void userial_sco_ctrl_skt_handle()
     }
 }
 
-static void* userial_socket_sco_thread()//(void *arg)
+static void* userial_socket_sco_thread(void *arg)
 {
+    RTK_UNUSED(arg);
     struct sockaddr_un addr, remote;
     socklen_t alen, len = sizeof(struct sockaddr_un);
     fd_set read_set, active_set;
@@ -1222,6 +1249,7 @@ static void* userial_socket_sco_thread()//(void *arg)
 #ifdef RTK_HANDLE_CMD
 static void userial_handle_cmd(unsigned char * recv_buffer, int total_length)
 {
+    RTK_UNUSED(total_length);
     uint16_t opcode = *(uint16_t*)recv_buffer;
     uint16_t scan_int, scan_win;
     static uint16_t voice_settings;
@@ -1233,11 +1261,19 @@ static void userial_handle_cmd(unsigned char * recv_buffer, int total_length)
         case HCI_BLE_WRITE_SCAN_PARAMS :
             scan_int = *(uint16_t*)&recv_buffer[4];
             scan_win = *(uint16_t*)&recv_buffer[6];
-            //ALOGE("scan_int = %d, scan_win = %d",scan_int,scan_win);
-            if(scan_win > 0x10){
-                *(uint16_t*)&recv_buffer[4] = (scan_int * 0x10) / scan_win;
-                *(uint16_t*)&recv_buffer[6] = 0x10;
+            if(scan_win > 20){
+                *(uint16_t*)&recv_buffer[4] = (scan_int * 20) / scan_win;
+                *(uint16_t*)&recv_buffer[6] = 20;
             }
+        break;
+
+        case HCI_LE_SET_EXTENDED_SCAN_PARAMETERS:
+            scan_int = *(uint16_t*)&recv_buffer[7];
+            scan_win = *(uint16_t*)&recv_buffer[9];
+            //if(scan_win > 20){
+            //    *(uint16_t*)&recv_buffer[4] = (scan_int * 20) / scan_win;
+            //    *(uint16_t*)&recv_buffer[6] = 20;
+            //}
         break;
 
 
@@ -1261,6 +1297,14 @@ static void userial_handle_cmd(unsigned char * recv_buffer, int total_length)
             }
         break;
 #endif
+        case HCI_SET_EVENT_MASK:
+          ALOGE("set event mask, it should bt stack init, set coex bt on");
+          if(rtk_parse_manager) {
+              rtk_parse_manager->rtk_set_bt_on(1);
+          }
+          Heartbeat_init();
+        break;
+
         default:
         break;
     }
@@ -1270,8 +1314,9 @@ static void userial_handle_cmd(unsigned char * recv_buffer, int total_length)
 
 //This recv data from bt process. The data type only have ACL/SCO/COMMAND
 // direction  BT HOST ----> CONTROLLER
-static void userial_recv_H4_rawdata()//(void *context)
+static void userial_recv_H4_rawdata(void *context)
 {
+    RTK_UNUSED(context);
     serial_data_type_t type = 0;
     ssize_t bytes_read;
     uint16_t opcode;
@@ -1476,6 +1521,7 @@ static void userial_filter_handle_event(unsigned char * recv_buffer, int total_l
 #ifdef RTK_HANDLE_EVENT
 static void userial_handle_event(unsigned char * recv_buffer, int total_length)
 {
+    RTK_UNUSED(total_length);
     uint8_t event;
     uint8_t *p_data = recv_buffer;
     event = p_data[0];
@@ -1483,8 +1529,9 @@ static void userial_handle_event(unsigned char * recv_buffer, int total_length)
     {
         ALOGD("total_length %d",total_length);
     }
+	switch (event) {
 #ifdef CONFIG_SCO_OVER_HCI
-    if(event == HCI_ESCO_CONNECTION_COMP_EVT) {
+    case HCI_ESCO_CONNECTION_COMP_EVT: {
         if(p_data[2] != 0) {
             sco_cb.thread_sco_running = false;
             pthread_join(sco_cb.thread_recv_sco_id, NULL);
@@ -1505,18 +1552,25 @@ static void userial_handle_event(unsigned char * recv_buffer, int total_length)
 
         ALOGE("userial_handle_event sco_handle: %d",sco_cb.sco_handle);
     }
-    if(event == HCI_DISCONNECTION_COMP_EVT) {
+    break;
+
+    case HCI_DISCONNECTION_COMP_EVT: {
         if((*((uint16_t *)&p_data[3])) == sco_cb.sco_handle) {
             sco_cb.sco_handle = 0;
             sco_cb.msbc_used = false;
         }
     }
+    break;
 #endif
+    default :
+    break;
+  }
 }
 
 #ifdef CONFIG_SCO_OVER_HCI
 static void userial_enqueue_sco_data(unsigned char * recv_buffer, int total_length)
 {
+    RTK_UNUSED(total_length);
     uint16_t sco_handle;
     uint8_t sco_length;
     uint8_t *p_data = recv_buffer;
@@ -1663,13 +1717,18 @@ static int userial_handle_recv_data(unsigned char * recv_buffer, int total_lengt
             if(recv_packet_current_type == DATA_TYPE_EVENT) {
                 event = received_resvered_header[0];
                 if(event == HCI_COMMAND_COMPLETE_EVT) {
-                    if(length >= 1) {
-                        *p_data = 1;
+                    if(received_resvered_length == 2) {
+                      if(length >= 1) {
+                          *p_data = 1;
+                      }
                     }
                 }
                 else if(event == HCI_COMMAND_STATUS_EVT) {
-                    if(length >= 2) {
-                        *(p_data + 1) = 1;
+                    if(received_resvered_length < 4) {
+                      int act_len = 4 - received_resvered_length;
+                      if(length >= act_len) {
+                          *(p_data + act_len -1) = 1;
+                      }
                     }
                 }
             }
@@ -1691,22 +1750,20 @@ static int userial_handle_recv_data(unsigned char * recv_buffer, int total_lengt
             //fall through
 
         case RTKBT_PACKET_END:
-#ifdef CONFIG_SCO_OVER_HCI
             switch (recv_packet_current_type) {
                 case DATA_TYPE_EVENT :
                     userial_handle_event(received_resvered_header, received_resvered_length);
-                    userial_filter_handle_event(received_resvered_header, received_resvered_length);
+					userial_filter_handle_event(received_resvered_header, received_resvered_length);
                 break;
-
+#ifdef CONFIG_SCO_OVER_HCI
                 case DATA_TYPE_SCO :
                     userial_enqueue_sco_data(received_resvered_header, received_resvered_length);
                 break;
-
+#endif
                 default :
 
                 break;
             }
-#endif
         break;
 
         default:
@@ -1726,8 +1783,12 @@ static int userial_handle_recv_data(unsigned char * recv_buffer, int total_lengt
 static void h5_data_ready_cb(serial_data_type_t type, unsigned int total_length)
 {
     unsigned char buffer[1028] = {0};
-    unsigned int length = 0;
+    int length = 0;
     length = h5_int_interface->h5_int_read_data(&buffer[1], total_length);
+    if(length == -1) {
+        ALOGE("%s, error read length", __func__);
+        assert(length != -1);
+    }
     buffer[0] = type;
     length++;
     uint16_t transmitted_length = 0;
@@ -1736,7 +1797,7 @@ static void h5_data_ready_cb(serial_data_type_t type, unsigned int total_length)
     unsigned int read_length = 0;
     do {
         read_length += userial_handle_recv_data(buffer + read_length, real_length - read_length);
-    }while(read_length < total_length);
+    }while(vnd_userial.thread_running && read_length < total_length);
 #endif
     if(filter_flag == 1)
     {
@@ -1811,16 +1872,36 @@ done:;
 
 void userial_recv_rawdata_hook(unsigned char *buffer, unsigned int total_length)
 {
-    if(rtkbt_transtype & RTKBT_TRANS_H5) {
-      h5_int_interface->h5_recv_msg(buffer, total_length);
-    }
-    else {
-      userial_recv_uart_rawdata(buffer, total_length);
-    }
+      uint16_t transmitted_length = 0;
+      unsigned int real_length = total_length;
+
+      while (total_length > 0) {
+          ssize_t ret;
+          RTK_NO_INTR(ret = write(vnd_userial.uart_fd[1], buffer + transmitted_length, total_length));
+          switch (ret) {
+          case -1:
+              ALOGE("In %s, error writing to the uart serial port: %s", __func__, strerror(errno));
+              goto done;
+          case 0:
+              // If we wrote nothing, don't loop more because we
+              // can't go to infinity or beyond
+              goto done;
+          default:
+              transmitted_length += ret;
+              total_length -= ret;
+              break;
+          }
+      }
+  done:;
+      if(real_length)
+          userial_enqueue_coex_rawdata(buffer, real_length, true);
+      return;
+
 }
 
-static void* userial_recv_socket_thread()//(void *arg)
+static void* userial_recv_socket_thread(void *arg)
 {
+    RTK_UNUSED(arg);
     struct epoll_event events[64];
     int j;
     while(vnd_userial.thread_running) {
@@ -1847,8 +1928,9 @@ static void* userial_recv_socket_thread()//(void *arg)
     return NULL;
 }
 
-static void* userial_recv_uart_thread()//(void *arg)
+static void* userial_recv_uart_thread(void *arg)
 {
+    RTK_UNUSED(arg);
     struct pollfd pfd;
     pfd.events = POLLIN|POLLHUP|POLLERR|POLLRDHUP;
     pfd.fd = vnd_userial.fd;
@@ -1889,8 +1971,9 @@ static void* userial_recv_uart_thread()//(void *arg)
     return NULL;
 }
 
-static void* userial_coex_thread()//(void *arg)
+static void* userial_coex_thread(void *arg)
 {
+    RTK_UNUSED(arg);
     struct epoll_event events[64];
     int j;
     while(vnd_userial.thread_running) {

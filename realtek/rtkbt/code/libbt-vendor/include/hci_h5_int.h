@@ -29,6 +29,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "rtk_hcidefs.h"
+#include "rtk_common.h"
 
 //HCI Command opcodes
 #define HCI_LE_READ_BUFFER_SIZE     0x2002

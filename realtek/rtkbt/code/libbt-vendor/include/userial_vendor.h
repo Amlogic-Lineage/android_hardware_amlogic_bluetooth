@@ -35,6 +35,7 @@
 #include <assert.h>
 #include "rtk_parse.h"
 #include "bt_skbuff.h"
+#include "rtk_common.h"
 
 /******************************************************************************
 **  Constants & Macros

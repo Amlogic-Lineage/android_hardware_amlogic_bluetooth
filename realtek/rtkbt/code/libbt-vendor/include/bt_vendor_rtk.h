@@ -49,6 +49,7 @@
 #include <unistd.h>
 #include <ctype.h>
 #include <cutils/properties.h>
+#include "rtk_common.h"
 
 
 /******************************************************************************

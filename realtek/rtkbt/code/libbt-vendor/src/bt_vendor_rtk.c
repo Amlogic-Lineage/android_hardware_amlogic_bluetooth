@@ -26,7 +26,7 @@
 
 #undef NDEBUG
 #define LOG_TAG "libbt_vendor"
-#define RTKBT_RELEASE_NAME "20180702_BT_ANDROID_9.0"
+#define RTKBT_RELEASE_NAME	"Test"
 #include <utils/Log.h>
 #include "bt_vendor_rtk.h"
 #include "upio.h"

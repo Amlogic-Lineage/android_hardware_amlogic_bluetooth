@@ -18,6 +18,7 @@
 
 #define LOG_TAG "rtk_btsnoop_net"
 #include "rtk_btsnoop_net.h"
+#include <unistd.h>
 
 
 #define DATA_DIRECT_2_ELLISY 1
@@ -44,7 +45,7 @@ static pthread_mutex_t btsnoop_log_lock;
 
 
 static void rtk_safe_close_(int *fd);
-static void *rtk_listen_fn_();
+static void *rtk_listen_fn_(void *context);
 
 static const char *RTK_LISTEN_THREAD_NAME_ = "rtk_btsnoop_net";
 static const int RTK_LOCALHOST_ = 0xC0A80AE2;       // 192.168.10.226
@@ -349,7 +350,8 @@ void rtk_btsnoop_net_write(serial_data_type_t type, uint8_t *data, bool is_recei
     pthread_mutex_unlock(&rtk_client_socket_lock_);
 }
 
-static void *rtk_listen_fn_() {
+static void *rtk_listen_fn_(void *context) {
+    RTK_UNUSED(context);
     prctl(PR_SET_NAME, (unsigned long)RTK_LISTEN_THREAD_NAME_, 0, 0, 0);
 
     rtk_listen_socket_ = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
