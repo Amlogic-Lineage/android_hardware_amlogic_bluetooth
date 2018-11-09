@@ -1064,7 +1064,7 @@ static ssize_t btchr_read(struct file *file_p,
 
         ret = wait_event_interruptible(btchr_read_wait, !is_queue_empty());
         if (ret < 0) {
-            RTKBT_ERR("%s: wait event is signaled %d", __func__, ret);
+            RTKBT_ERR("%s: wait event is signaled %zu", __func__, ret);
             break;
         }
 
@@ -1756,7 +1756,7 @@ void rtk_update_altsettings(patch_info *patch_entry, const unsigned char* org_co
 
     if (config->data_len != org_config_len - sizeof(struct rtk_bt_vendor_config))
     {
-        RTKBT_ERR("rtk_update_altsettings: config len(%x) is not right(%x)", config->data_len, org_config_len-sizeof(struct rtk_bt_vendor_config));
+        RTKBT_ERR("rtk_update_altsettings: config len(%x) is not right(%x)", config->data_len, org_config_len-(int)sizeof(struct rtk_bt_vendor_config));
         return;
     }
 
