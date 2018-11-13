@@ -1186,6 +1186,14 @@ uint8_t hw_lpm_enable(uint8_t turn_on)
             upio_set(UPIO_LPM_MODE, UPIO_DEASSERT, 0);
         }
 
+        ALOGE("LPM parameter = %d, %d, %d, %d, %d \n",*p,*(p+1),*(p+2),*(p+3),*(p+4));
+
+        if (0 == *p)
+            ALOGE("LPM disabled!!");
+        else
+            ALOGE("LPM enabled!!");
+
+
         if ((ret = bt_vendor_cbacks->xmit_cb(HCI_VSC_WRITE_SLEEP_MODE, p_buf, \
                                         hw_lpm_ctrl_cback)) == FALSE)
         {
