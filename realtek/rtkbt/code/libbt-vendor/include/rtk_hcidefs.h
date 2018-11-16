@@ -1,6 +1,6 @@
 /******************************************************************************
  *
- *  Copyright (C) 1999-2014 Broadcom Corporation
+ *  Copyright (C) 2009-2018 Realtek Corporation.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -15,7 +15,6 @@
  *  limitations under the License.
  *
  ******************************************************************************/
-
 #ifndef HCIDEFS_H
 #define HCIDEFS_H
 
@@ -431,6 +430,9 @@
 
 /* tracking sub event */
 #define HCI_VSE_SUBCODE_BLE_TRACKING_SUB_EVT       0x56 /* Tracking event */
+
+/* debug info sub event */
+#define HCI_VSE_SUBCODE_DEBUG_INFO_SUB_EVT         0x57
 
 /* LE supported states definition */
 #define HCI_LE_ADV_STATE          0x00000001

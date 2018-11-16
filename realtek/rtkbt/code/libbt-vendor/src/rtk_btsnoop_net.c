@@ -1,6 +1,6 @@
 /******************************************************************************
  *
- *  Copyright (C) 2013 Google, Inc.
+ *  Copyright (C) 2009-2018 Realtek Corporation.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -15,7 +15,6 @@
  *  limitations under the License.
  *
  ******************************************************************************/
-
 #define LOG_TAG "rtk_btsnoop_net"
 #include "rtk_btsnoop_net.h"
 #include <unistd.h>

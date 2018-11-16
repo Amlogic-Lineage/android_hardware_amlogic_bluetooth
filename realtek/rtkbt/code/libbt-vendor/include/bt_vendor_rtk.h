@@ -1,6 +1,6 @@
 /******************************************************************************
  *
- *  Copyright (C) 2009-2012 Realtek Corporation
+ *  Copyright (C) 2009-2018 Realtek Corporation
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -31,7 +31,6 @@
 #define BT_VENDOR_RTK_H
 
 #include "bt_vendor_lib.h"
-#include "vnd_buildcfg.h"
 #include "rtk_btsnoop_net.h"
 #include <string.h>
 #include <fcntl.h>
@@ -51,7 +50,7 @@
 #include <cutils/properties.h>
 #include "rtk_common.h"
 
-
+#define RTK_VERSION "5.0.1"
 /******************************************************************************
 **  Constants & Macros
 ******************************************************************************/
@@ -59,7 +58,6 @@
 #define RTKBT_TRANS_H5          0x10
 #define RTKBT_TRANS_UART        0x01
 #define RTKBT_TRANS_USB         0x20
-
 
 #ifndef FALSE
 #define FALSE  0
@@ -83,6 +81,8 @@
 #define SET_ISO_CFG             _IOW('H', 202, int)
 #define GET_USB_INFO            _IOW('H', 203, int)
 #define RESET_CONTROLLER        _IOW('H', 204, int)
+#define DWFW_CMPLT              _IOW('H', 205, int)
+
 
 /* Device port name where Bluetooth controller attached */
 #ifndef BLUETOOTH_UART_DEVICE_PORT

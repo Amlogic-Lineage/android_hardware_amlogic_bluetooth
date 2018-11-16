@@ -1,3 +1,21 @@
+/******************************************************************************
+ *
+ *  Copyright (C) 2009-2018 Realtek Corporation
+ *
+ *  Licensed under the Apache License, Version 2.0 (the "License");
+ *  you may not use this file except in compliance with the License.
+ *  You may obtain a copy of the License at:
+ *
+ *  http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *  Unless required by applicable law or agreed to in writing, software
+ *  distributed under the License is distributed on an "AS IS" BASIS,
+ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *  See the License for the specific language governing permissions and
+ *  limitations under the License.
+ *
+ ******************************************************************************/
+
 #define LOG_TAG "bt_hwcfg_usb"
 #define RTKBT_RELEASE_NAME	"Test"
 
@@ -28,7 +46,6 @@
 /******************************************************************************
 **  Constants &  Macros
 ******************************************************************************/
-#define RTK_VERSION "4.1.1"
 
 extern uint8_t vnd_local_bd_addr[BD_ADDR_LEN];
 extern bool rtkbt_auto_restart;
@@ -111,7 +128,7 @@ static usb_patch_info usb_fw_patch_table[] = {
 { 0x0BDA, 0xB82C, 0x8822, 0, 0, "mp_rtl8822b_fw", "rtl8822b_fw", "rtl8822b_config", NULL, 0 ,CONFIG_MAC_OFFSET_GEN_3PLUS, MAX_PATCH_SIZE_24K}, /* RTL8822BU */
 { 0x0BDA, 0xB023, 0x8822, 0, 0, "mp_rtl8822b_fw", "rtl8822b_fw", "rtl8822b_config", NULL, 0 ,CONFIG_MAC_OFFSET_GEN_3PLUS, MAX_PATCH_SIZE_24K}, /* RTL8822BE */
 { 0x0BDA, 0xB703, 0x8703, 0, 0, "mp_rtl8723c_fw", "rtl8723c_fw", "rtl8723c_config", NULL, 0 ,CONFIG_MAC_OFFSET_GEN_3PLUS, MAX_PATCH_SIZE_24K}, /* RTL8723CU */
-{ 0x0BDA, 0xC82C, 0x8822, 0, 0, "mp_rtl8822c_fw", "rtl8822c_fw", "rtl8822c_config", NULL, 0 ,CONFIG_MAC_OFFSET_GEN_3PLUS, MAX_PATCH_SIZE_40K}, /* RTL8822CU */
+{ 0x0BDA, 0xC82C, 0x8822, 0, 0, "mp_rtl8822c_fw", "rtl8822c_fw", "rtl8822c_config", NULL, 0 ,CONFIG_MAC_OFFSET_GEN_4PLUS, MAX_PATCH_SIZE_40K}, /* RTL8822CU */
 
 /* todo: RTL8703BU */
 
@@ -201,10 +218,10 @@ static void rtk_usb_update_altsettings(usb_patch_info *patch_entry, unsigned cha
     struct rtk_bt_vendor_config_entry* entry = config->entry;
     size_t config_len = *config_len_ptr;
     unsigned int  i = 0;
-	int count = 0,temp = 0, j;
+    int count = 0,temp = 0, j;
 
     ALOGI("ORG Config len=%08zx:\n", config_len);
-    for(i=0;i<=config_len;i+=0x10)
+    for(i = 0; i <= config_len; i+= 0x10)
     {
         ALOGI("%08x: %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x\n", i, \
             config_buf_ptr[i], config_buf_ptr[i+1], config_buf_ptr[i+2], config_buf_ptr[i+3], config_buf_ptr[i+4], config_buf_ptr[i+5], config_buf_ptr[i+6], config_buf_ptr[i+7], \
@@ -229,7 +246,7 @@ static void rtk_usb_update_altsettings(usb_patch_info *patch_entry, unsigned cha
         return;
     }
 
-    for (i=0; i<data_len;)
+    for (i = 0; i < data_len;)
     {
         for(j = 0; j < count;j++)
         {
@@ -244,6 +261,7 @@ static void rtk_usb_update_altsettings(usb_patch_info *patch_entry, unsigned cha
         i += temp;
         entry = (struct rtk_bt_vendor_config_entry*)((uint8_t*)entry + temp);
     }
+
     for(j = 0; j < count;j++){
         if(offset[j] == 0)
             continue;
@@ -258,10 +276,10 @@ static void rtk_usb_update_altsettings(usb_patch_info *patch_entry, unsigned cha
         entry = (struct rtk_bt_vendor_config_entry*)((uint8_t*)entry + temp);
     }
     config->data_len = cpu_to_le16(i);
-    *config_len_ptr = i+sizeof(struct rtk_bt_vendor_config);
+    *config_len_ptr = i + sizeof(struct rtk_bt_vendor_config);
 
     ALOGI("NEW Config len=%08zx:\n", *config_len_ptr);
-    for(i=0;i<=(*config_len_ptr);i+=0x10)
+    for(i = 0; i<= (*config_len_ptr); i+= 0x10)
     {
         ALOGI("%08x: %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x\n", i, \
             config_buf_ptr[i], config_buf_ptr[i+1], config_buf_ptr[i+2], config_buf_ptr[i+3], config_buf_ptr[i+4], config_buf_ptr[i+5], config_buf_ptr[i+6], config_buf_ptr[i+7], \
@@ -281,7 +299,7 @@ static void rtk_usb_parse_config_file(unsigned char** config_buf, size_t* filele
     //uint32_t config_has_bdaddr = 0;
     uint8_t *p;
 
-	ALOGD("bt_addr = %x", bt_addr[0]);
+    ALOGD("bt_addr = %x", bt_addr[0]);
     if (le32_to_cpu(config->signature) != RTK_VENDOR_CONFIG_MAGIC)
     {
         ALOGE("config signature magic number(0x%x) is not set to RTK_VENDOR_CONFIG_MAGIC", config->signature);
@@ -295,7 +313,7 @@ static void rtk_usb_parse_config_file(unsigned char** config_buf, size_t* filele
     }
 
     hw_cfg_cb.heartbeat = 0;
-    for (i=0; i<config_len;)
+    for (i = 0; i < config_len;)
     {
         switch(le16_to_cpu(entry->offset))
         {
@@ -633,7 +651,7 @@ void hw_usb_config_cback(void *p_mem)
                     STREAM_TO_UINT16(hw_cfg_cb.hci_revision, p);
                     p = (uint8_t *)(p_evt_buf + 1) + HCI_EVT_CMD_CMPL_OP1001_LMP_SUBVERSION_OFFSET;
                     STREAM_TO_UINT16(hw_cfg_cb.lmp_subversion, p);
-                    
+
                     prtk_usb_patch_file_info = rtk_usb_get_fw_table_entry(hw_cfg_cb.vid, hw_cfg_cb.pid);
                     if((prtk_usb_patch_file_info == NULL) || (prtk_usb_patch_file_info->lmp_sub_default == 0))
                     {
@@ -668,6 +686,7 @@ void hw_usb_config_cback(void *p_mem)
                     else
                     {
                         BTVNDDBG("%s: Warm BT controller startup with same lmp", __func__);
+                        userial_vendor_usb_ioctl(DWFW_CMPLT, NULL);
                         free(hw_cfg_cb.total_buf);
                         hw_cfg_cb.total_len = 0;
 
@@ -677,7 +696,7 @@ void hw_usb_config_cback(void *p_mem)
                         hw_cfg_cb.state = 0;
                         is_proceeding = TRUE;
                     }
-                    
+
  /*                   if(hw_cfg_cb.lmp_subversion == LMPSUBVERSION_8723a)
                     {
                         hw_cfg_cb.state = HW_CFG_START;
@@ -748,7 +767,7 @@ CFG_USB_START:
                 hw_cfg_cb.config_len = rtk_usb_get_bt_config(&hw_cfg_cb.config_buf, prtk_usb_patch_file_info->config_name, prtk_usb_patch_file_info->mac_offset);
                 if (hw_cfg_cb.config_len)
                 {
-                    ALOGE("Get Config file fail, just use efuse settings");
+                    ALOGE("update altsettings");
                     rtk_usb_update_altsettings(prtk_usb_patch_file_info, hw_cfg_cb.config_buf, &(hw_cfg_cb.config_len));
                 }
 
@@ -808,6 +827,7 @@ DOWNLOAD_USB_FW:
                     if(iIndexRx&0x80)
                     {
                         BTVNDDBG("vendor lib fwcfg completed");
+                        userial_vendor_usb_ioctl(DWFW_CMPLT, NULL);
                         free(hw_cfg_cb.total_buf);
                         hw_cfg_cb.total_len = 0;
 
@@ -857,6 +877,7 @@ DOWNLOAD_USB_FW:
             if (p_buf != NULL)
                 bt_vendor_cbacks->dealloc(p_buf);
 
+            userial_vendor_usb_ioctl(DWFW_CMPLT, NULL);
             bt_vendor_cbacks->fwcfg_cb(BT_VND_OP_RESULT_FAIL);
         }
 
@@ -892,6 +913,7 @@ DOWNLOAD_USB_FW:
 *******************************************************************************/
 void hw_usb_config_start(char transtype, uint32_t usb_id)
 {
+    RTK_UNUSED(transtype);
     memset(&hw_cfg_cb, 0, sizeof(bt_hw_cfg_cb_t));
     hw_cfg_cb.dl_fw_flag = 1;
     hw_cfg_cb.chip_type = CHIPTYPE_NONE;

@@ -1,6 +1,6 @@
 /******************************************************************************
  *
- *  Copyright (C) 2009-2012 Realtek Corporation
+ *  Copyright (C) 2009-2018 Realtek Corporation
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -220,5 +220,5 @@ void userial_recv_rawdata_hook(unsigned char *buffer, unsigned int total_length)
 
 #define RTK_HANDLE_EVENT
 #define RTK_HANDLE_CMD
-#define CONFIG_SCO_OVER_HCI
+//#define CONFIG_SCO_OVER_HCI
 #endif /* USERIAL_VENDOR_H */

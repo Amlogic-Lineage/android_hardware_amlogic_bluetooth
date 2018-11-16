@@ -1,6 +1,6 @@
 /******************************************************************************
  *
- *  Copyright (C) 2016 Realtek Corporation.
+ *  Copyright (C) 2009-2018 Realtek Corporation.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -259,6 +259,7 @@ static pthread_mutex_t h5_wakeup_mutex = PTHREAD_MUTEX_INITIALIZER;
 /* Num of allowed outstanding HCI CMD packets */
 volatile int num_hci_cmd_pkts = 1;
 extern unsigned int rtkbt_h5logfilter;
+extern void userial_recv_rawdata_hook(unsigned char *buffer, unsigned int total_length);
 
 /******************************************************************************
 **  Static variables
@@ -378,6 +379,26 @@ static void H5LogMsg(const char *fmt_str, ...)
      {
         return;
      }
+}
+
+static void rtkbt_h5_send_hw_error()
+{
+    unsigned char p_buf[100];
+    const char *str = "host stack: h5 send error";
+    int length = strlen(str) + 1 + 4;
+    p_buf[0] = HCIT_TYPE_EVENT;//event
+    p_buf[1] = HCI_VSE_SUBCODE_DEBUG_INFO_SUB_EVT;//firmwre event log
+    p_buf[2] = strlen(str) + 2;//len
+    p_buf[3] = 0x01;// host log opcode
+    strcpy((char *)&p_buf[4], str);
+    userial_recv_rawdata_hook(p_buf,length);
+
+    length = 4;
+    p_buf[0] = HCIT_TYPE_EVENT;//event
+    p_buf[1] = HCI_HARDWARE_ERROR_EVT;//hardware error
+    p_buf[2] = 0x01;//len
+    p_buf[3] = 0xfb;//h5 error code
+    userial_recv_rawdata_hook(p_buf,length);
 }
 
 // reverse bit
@@ -1310,7 +1331,8 @@ void h5_process_ctl_pkts(void)
         if (!memcmp(skb_get_data(skb), h5sync, 0x2)) {
 
             H5LogMsg("H5: <<<---recv sync req in H5_ACTIVE");
-            kill(getpid(), SIGKILL);
+            rtkbt_h5_send_hw_error();
+            //kill(getpid(), SIGKILL);
             hci_h5_send_sync_resp();
             H5LogMsg("H5 : H5_ACTIVE transit to H5_UNINITIALIZED");
             rtk_h5.link_estab_state = H5_UNINITIALIZED;
@@ -1890,7 +1912,8 @@ static void data_retransfer_thread(void *arg)
             {
             //do not put packet to rel queue, and do not send
             //Kill bluetooth
-            kill(getpid(), SIGKILL);
+            rtkbt_h5_send_hw_error();
+            //kill(getpid(), SIGKILL);
             }
 
         }
@@ -2089,7 +2112,7 @@ void hci_h5_cleanup(void)
         ALOGE("H5 pthread_join() FAILED result:%d", result);
     }
 
-    ms_delay(200);
+    //ms_delay(200);
 
     pthread_mutex_destroy(&rtk_h5.mutex);
     pthread_mutex_destroy(&rtk_h5.data_mutex);
@@ -2222,7 +2245,7 @@ uint16_t hci_h5_send_cmd(serial_data_type_t type, uint8_t *data, uint16_t length
 *******************************************************************************/
 uint16_t hci_h5_send_acl_data(serial_data_type_t type, uint8_t *data, uint16_t length)
 {
-    uint16_t bytes_to_send;//, lay_spec;
+    uint16_t bytes_to_send;
     sk_buff * skb = NULL;
 
     skb = skb_alloc_and_init(type, data, length);
@@ -2250,7 +2273,7 @@ uint16_t hci_h5_send_acl_data(serial_data_type_t type, uint8_t *data, uint16_t l
 uint16_t hci_h5_send_sco_data(serial_data_type_t type, uint8_t *data, uint16_t length)
 {
     sk_buff * skb = NULL;
-    uint16_t bytes_to_send;//, lay_spec;
+    uint16_t bytes_to_send;
 
     skb = skb_alloc_and_init(type, data, length);
     if(!skb) {

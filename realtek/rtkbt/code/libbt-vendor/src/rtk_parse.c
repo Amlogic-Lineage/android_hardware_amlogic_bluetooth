@@ -1,6 +1,6 @@
 /******************************************************************************
  *
- *  Copyright (C) 2016 Realtek Corporation.
+ *  Copyright (C) 2009-2018 Realtek Corporation.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -15,6 +15,7 @@
  *  limitations under the License.
  *
  ******************************************************************************/
+
 /******************************************************************************
 *
 *	Module Name:
@@ -33,7 +34,7 @@
 *
 ******************************************************************************/
 #define LOG_TAG "rtk_parse"
-#define RTKBT_RELEASE_NAME	"Test"
+#define RTKBT_RELEASE_NAME "20181116_BT_ANDROID_9.0"
 
 #include <utils/Log.h>
 #include <stdlib.h>
@@ -63,7 +64,7 @@
 #include "rtk_parse.h"
 #include <sys/syscall.h>
 
-#define RTK_VERSION "3.0"
+#define RTK_COEX_VERSION "3.0"
 
 char invite_req[] = "INVITE_REQ";
 char invite_rsp[] = "INVITE_RSP";
@@ -123,8 +124,8 @@ char bt_leave[] =   "BT_LEAVE";
 //vendor cmd to wifi driver
 #define HCI_OP_HCI_EXTENSION_VERSION_NOTIFY (0x0100 | HCI_GRP_VENDOR_SPECIFIC)
 #define HCI_OP_BT_OPERATION_NOTIFY          (0x0102 | HCI_GRP_VENDOR_SPECIFIC)
-#define    HCI_OP_HCI_BT_INFO_NOTIFY           (0x0106 | HCI_GRP_VENDOR_SPECIFIC)
-#define    HCI_OP_HCI_BT_COEX_NOTIFY           (0x0107 | HCI_GRP_VENDOR_SPECIFIC)
+#define HCI_OP_HCI_BT_INFO_NOTIFY           (0x0106 | HCI_GRP_VENDOR_SPECIFIC)
+#define HCI_OP_HCI_BT_COEX_NOTIFY           (0x0107 | HCI_GRP_VENDOR_SPECIFIC)
 #define HCI_OP_HCI_BT_PATCH_VER_NOTIFY      (0x0108 | HCI_GRP_VENDOR_SPECIFIC)
 #define HCI_OP_HCI_BT_AFH_MAP_NOTIFY        (0x0109 | HCI_GRP_VENDOR_SPECIFIC)
 #define HCI_OP_HCI_BT_REGISTER_VALUE_NOTIFY (0x010a | HCI_GRP_VENDOR_SPECIFIC)
@@ -283,6 +284,8 @@ static volatile bool coex_cmd_send = false;
 #define is_profile_busy(profile)        ((rtk_prof.profile_status & BIT(profile)) >0)
 
 static void timeout_handler(int signo, siginfo_t * info, void *context);
+static void notify_func(union sigval sig);
+
 static int coex_msg_send(char *tx_msg, int msg_size);
 static int coex_msg_recv(uint8_t *recv_msg, uint8_t *msg_size);
 
@@ -342,10 +345,15 @@ static timer_t OsAllocateTimer(int signo)
     timer_t timerid = (timer_t)-1;
 
     // Create the POSIX timer to generate signo
-    sigev.sigev_notify = SIGEV_THREAD_ID;
-    sigev.sigev_notify_thread_id = syscall(__NR_gettid);
-    sigev.sigev_signo = signo;
-    sigev.sigev_value.sival_ptr = &timerid;
+    //sigev.sigev_notify = SIGEV_THREAD_ID;
+    //sigev.sigev_notify_thread_id = syscall(__NR_gettid);
+    //sigev.sigev_signo = signo;
+    //sigev.sigev_value.sival_ptr = &timerid;
+
+    memset(&sigev, 0, sizeof(sigev));
+    sigev.sigev_notify = SIGEV_THREAD;
+    sigev.sigev_notify_function = notify_func;
+    sigev.sigev_value.sival_int = signo;
 
     //ALOGE("OsAllocateTimer rtk_parse sigev.sigev_notify_thread_id = syscall(__NR_gettid)!");
 
@@ -406,6 +414,7 @@ static int OsStopTimer(timer_t timerid)
 
 int alloc_polling_timer()
 {
+/*
     struct sigaction sigact;
 
     sigemptyset(&sigact.sa_mask);
@@ -420,7 +429,7 @@ int alloc_polling_timer()
         ALOGE("alloc_polling_timer, sigaction failed");
         return -1;
     }
-
+*/
     // Create and set the timer when to expire
     rtk_prof.timer_polling= OsAllocateTimer(TIMER_POLLING);
     RtkLogMsg("alloc polling timer");
@@ -447,6 +456,7 @@ int start_polling_timer(int value)
 
 int alloc_hogp_packet_count_timer()
 {
+/*
     struct sigaction sigact;
 
     sigemptyset(&sigact.sa_mask);
@@ -461,7 +471,7 @@ int alloc_hogp_packet_count_timer()
         ALOGE("alloc_hogp_packet_count_timer, sigaction failed");
         return -1;
     }
-
+*/
     // Create and set the timer when to expire
     rtk_prof.timer_hogp_packet_count= OsAllocateTimer(TIMER_HOGP_PACKET_COUNT);
     RtkLogMsg("alloc hogp packet");
@@ -488,6 +498,7 @@ int start_hogp_packet_count_timer()
 
 int alloc_a2dp_packet_count_timer()
 {
+/*
     struct sigaction sigact;
 
     sigemptyset(&sigact.sa_mask);
@@ -502,7 +513,7 @@ int alloc_a2dp_packet_count_timer()
         ALOGE("alloc_a2dp_packet_count_timer, sigaction failed");
         return -1;
     }
-
+*/
     // Create and set the timer when to expire
     rtk_prof.timer_a2dp_packet_count= OsAllocateTimer(TIMER_A2DP_PACKET_COUNT);
     RtkLogMsg("alloc a2dp packet");
@@ -529,6 +540,7 @@ int start_a2dp_packet_count_timer()
 
 int alloc_pan_packet_count_timer()
 {
+/*
     struct sigaction sigact;
 
     sigemptyset(&sigact.sa_mask);
@@ -543,7 +555,7 @@ int alloc_pan_packet_count_timer()
         ALOGE("alloc_pan_packet_count_timer, sigaction failed");
         return -1;
     }
-
+*/
     // Create and set the timer when to expire
     rtk_prof.timer_pan_packet_count= OsAllocateTimer(TIMER_PAN_PACKET_COUNT);
 
@@ -1304,14 +1316,8 @@ void packets_count(uint16_t handle, uint16_t scid, uint16_t length, uint8_t dire
 
 static void timeout_handler(int signo, siginfo_t * info, void *context)
 {
-	if(info == NULL)
-	{
-		RtkLogMsg("info null");
-	}
-	if(context == NULL)
-	{
-		RtkLogMsg("context null");
-	}
+    RTK_UNUSED(info);
+    RTK_UNUSED(context);
     if (signo == TIMER_POLLING)
     {
         RtkLogMsg("polling timeout");
@@ -1388,6 +1394,12 @@ static void timeout_handler(int signo, siginfo_t * info, void *context)
     {
         ALOGE("rtk_parse_data timer unspported signo(%d)", signo);
     }
+}
+
+static void notify_func(union sigval sig)
+{
+    int signo = sig.sival_int;
+    timeout_handler(signo, NULL, NULL);
 }
 
 #if 0
@@ -1848,7 +1860,9 @@ void rtk_handle_event_from_wifi(uint8_t* msg)
 {
     uint8_t *p = msg;
     uint8_t event_code = *p++;
-	uint8_t total_length = 0;
+    uint8_t total_length = 0;
+
+    RtkLogMsg("receive invite rsp from wifi msg : %s", msg);
     if(memcmp(msg, invite_rsp, sizeof(invite_rsp)) == 0)
     {
 #if 0
@@ -2058,14 +2072,14 @@ int stop_btwifi_coex_receive_thread()
             ALOGE( "data thread pthread_join() failed result:%d", result);
         }
 
-        if(rtk_prof.udpsocket) {
+        if(rtk_prof.udpsocket > 0) {
             RtkLogMsg("close socket %d", rtk_prof.udpsocket);
             if((result = close(rtk_prof.udpsocket)) != 0)
             {
                 ALOGE("close socket error!");
             }
         }
-        else if(rtk_prof.btcoex_chr) {
+        else if(rtk_prof.btcoex_chr > 0) {
             RtkLogMsg("close char device  %d", rtk_prof.btcoex_chr);
             if((result = close(rtk_prof.btcoex_chr)) != 0)
             {
@@ -2148,7 +2162,7 @@ int open_btcoex_chrdev()
 void rtk_parse_init(void)
 {
     ALOGI("RTKBT_RELEASE_NAME: %s",RTKBT_RELEASE_NAME);
-    RtkLogMsg("rtk_profile_init, version: %s", RTK_VERSION);
+    RtkLogMsg("rtk_profile_init, version: %s", RTK_COEX_VERSION);
 
     memset(&rtk_prof, 0, sizeof(rtk_prof));
     pthread_mutex_init(&rtk_prof.profile_mutex, NULL);
@@ -2860,8 +2874,9 @@ void rtk_parse_l2cap_data(uint8_t *pp, uint8_t direction)
 
 void rtk_add_le_profile(BD_ADDR bdaddr, uint16_t handle, uint8_t profile_map)
 {
+    RTK_UNUSED(bdaddr);
     RtkLogMsg("rtk_add_le_profile, handle is %x, profile_map is %x", handle, profile_map);
-	RtkLogMsg("bdaddr[0] = %d", bdaddr[0]);
+
     tRTK_CONN_PROF* hci_conn = find_connection_by_handle(&rtk_prof, handle);
     if(hci_conn)
     {
@@ -2879,8 +2894,9 @@ void rtk_add_le_profile(BD_ADDR bdaddr, uint16_t handle, uint8_t profile_map)
 
 void rtk_delete_le_profile(BD_ADDR bdaddr, uint16_t handle, uint8_t profile_map)
 {
+    RTK_UNUSED(bdaddr);
     RtkLogMsg("rtk_delete_le_profile, handle is %x, profile_map is %x", handle, profile_map);
-	RtkLogMsg("bdaddr[0] = %d", bdaddr[0]);
+
     pthread_mutex_lock(&rtk_prof.profile_mutex);
     tRTK_CONN_PROF* hci_conn = find_connection_by_handle(&rtk_prof, handle);
     if(hci_conn == NULL)

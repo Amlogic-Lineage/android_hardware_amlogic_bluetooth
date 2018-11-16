@@ -1,3 +1,21 @@
+/******************************************************************************
+ *
+ *  Copyright (C) 2009-2018 Realtek Corporation
+ *
+ *  Licensed under the Apache License, Version 2.0 (the "License");
+ *  you may not use this file except in compliance with the License.
+ *  You may obtain a copy of the License at:
+ *
+ *  http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *  Unless required by applicable law or agreed to in writing, software
+ *  distributed under the License is distributed on an "AS IS" BASIS,
+ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *  See the License for the specific language governing permissions and
+ *  limitations under the License.
+ *
+ ******************************************************************************/
+
 #define LOG_TAG "bt_hwcfg_uart"
 #define RTKBT_RELEASE_NAME	"Test"
 
@@ -28,7 +46,6 @@
 /******************************************************************************
 **  Constants &  Macros
 ******************************************************************************/
-#define RTK_VERSION "4.1.1"
 
 extern uint8_t vnd_local_bd_addr[BD_ADDR_LEN];
 extern bool rtkbt_auto_restart;
@@ -95,8 +112,8 @@ static patch_info patch_table[] = {
     {0x8703,            HCI_VERSION_MASK_ALL,    HCI_REVISION_MASK_ALL, 1<<3,                1<<7,                  "rtl8723cs_cg_fw",      "rtl8723cs_cg_config",  CONFIG_MAC_OFFSET_GEN_3PLUS,  MAX_PATCH_SIZE_24K},     //rtl8723cs_cg
     {0x8703,            HCI_VERSION_MASK_ALL,    HCI_REVISION_MASK_ALL, 1<<4,                1<<7,                  "rtl8723cs_vf_fw",      "rtl8723cs_vf_config",  CONFIG_MAC_OFFSET_GEN_3PLUS,  MAX_PATCH_SIZE_24K},     //rtl8723cs_vf
 //  {0x8822,            HCI_VERSION_MASK_ALL,    HCI_REVISION_MASK_ALL, CHIP_TYPE_MASK_ALL,  1<<8,                  "rtl8822bs_fw",         "rtl8822bs_config",     CONFIG_MAC_OFFSET_GEN_3PLUS,  MAX_PATCH_SIZE_24K},   //Rtl8822BS
-    {0x8822,            HCI_VERSION_MASK_ALL,    ~(1<<0xc),             CHIP_TYPE_MASK_ALL,  1<<8,                  "rtl8822bs_fw",         "rtl8822bs_config",     CONFIG_MAC_OFFSET_GEN_3PLUS,  MAX_PATCH_SIZE_24K},     //Rtl8822BS   
-    {0x8822,            HCI_VERSION_MASK_ALL,    (1<<0xc),              CHIP_TYPE_MASK_ALL,  1<<13,                 "rtl8822cs_fw",         "rtl8822cs_config",     CONFIG_MAC_OFFSET_GEN_3PLUS,  MAX_PATCH_SIZE_40K},     //Rtl8822CS 
+    {0x8822,            HCI_VERSION_MASK_ALL,    ~(1<<0xc),             CHIP_TYPE_MASK_ALL,  1<<8,                  "rtl8822bs_fw",         "rtl8822bs_config",     CONFIG_MAC_OFFSET_GEN_3PLUS,  MAX_PATCH_SIZE_24K},     //Rtl8822BS
+    {0x8822,            HCI_VERSION_MASK_ALL,    (1<<0xc),              CHIP_TYPE_MASK_ALL,  1<<13,                 "rtl8822cs_fw",         "rtl8822cs_config",     CONFIG_MAC_OFFSET_GEN_4PLUS,  MAX_PATCH_SIZE_40K},     //Rtl8822CS
 
     {0x8723,            HCI_VERSION_MASK_ALL,    (1<<0xd),              ~(1<<7),           1<<9,                    "rtl8723ds_fw",         "rtl8723ds_config",     CONFIG_MAC_OFFSET_GEN_3PLUS,  MAX_PATCH_SIZE_40K}, //Rtl8723ds
     {0x8723,            HCI_VERSION_MASK_ALL,    (1<<0xd),              1<<7,              1<<9,                    "rtl8703cs_fw",         "rtl8703cs_config",     CONFIG_MAC_OFFSET_GEN_3PLUS,  MAX_PATCH_SIZE_40K}, //Rtl8703cs

@@ -1,3 +1,20 @@
+/******************************************************************************
+ *
+ *  Copyright (C) 2009-2018 Realtek Corporation.
+ *
+ *  Licensed under the Apache License, Version 2.0 (the "License");
+ *  you may not use this file except in compliance with the License.
+ *  You may obtain a copy of the License at:
+ *
+ *  http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *  Unless required by applicable law or agreed to in writing, software
+ *  distributed under the License is distributed on an "AS IS" BASIS,
+ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *  See the License for the specific language governing permissions and
+ *  limitations under the License.
+ *
+ ******************************************************************************/
 #define LOG_TAG "rtk_heartbeat"
 #define RTKBT_RELEASE_NAME	"Test"
 
@@ -26,7 +43,7 @@
 #include <semaphore.h>
 #include <endian.h>
 #include <byteswap.h>
-#include <sys/un.h> 
+#include <sys/un.h>
 #include <stddef.h>
 #include <sys/socket.h>
 #include <sys/types.h>
@@ -46,6 +63,7 @@ static bool heartbeatFlag = false;
 static int heartbeatCount= 0;
 static uint16_t nextSeqNum= 1;
 static uint16_t cleanupFlag = 0;
+static pthread_mutex_t heartbeat_mutex;
 
 typedef struct Rtk_Service_Data
 {
@@ -115,12 +133,22 @@ static void load_rtkbt_heartbeat_conf()
 
 }
 
-static void rtkbt_heartbeat_send_hw_error()
+static void rtkbt_heartbeat_send_hw_error(uint8_t status, uint16_t seqnum, uint16_t next_seqnum, int heartbeatCnt)
 {
-    unsigned char p_buf[4];
-    int length = 4;
-    p_buf[0] = 0x04;//event
-    p_buf[1] = 0x10;//hardware error
+    unsigned char p_buf[100];
+    int length;
+    p_buf[0] = HCIT_TYPE_EVENT;//event
+    p_buf[1] = HCI_VSE_SUBCODE_DEBUG_INFO_SUB_EVT;//firmwre event log
+    p_buf[3] = 0x01;// host log opcode
+    length = sprintf((char *)&p_buf[4], "host stack: heartbeat hw error: %d:%d:%d:%d",
+      status, seqnum, next_seqnum, heartbeatCnt);
+    p_buf[2] = length + 2;//len
+    length = length + 1 + 4;
+    userial_recv_rawdata_hook(p_buf,length);
+
+    length = 4;
+    p_buf[0] = HCIT_TYPE_EVENT;//event
+    p_buf[1] = HCI_HARDWARE_ERROR_EVT;//hardware error
     p_buf[2] = 0x01;//len
     p_buf[3] = 0xfc;//heartbeat error code
     userial_recv_rawdata_hook(p_buf,length);
@@ -138,41 +166,51 @@ static void rtkbt_heartbeat_cmpl_cback (void *p_params)
         status = p_evt_buf->data[HCI_EVT_HEARTBEAT_STATUS_OFFSET];
         seqnum = p_evt_buf->data[HCI_EVT_HEARTBEAT_SEQNUM_OFFSET_H]<<8 | p_evt_buf->data[HCI_EVT_HEARTBEAT_SEQNUM_OFFSET_L];
     }
-    
+
     if(status == 0 && seqnum == nextSeqNum)
     {
-        nextSeqNum = (seqnum+1);
+        nextSeqNum = (seqnum + 1);
+        pthread_mutex_lock(&heartbeat_mutex);
         heartbeatCount = 0;
+        pthread_mutex_unlock(&heartbeat_mutex);
     }
     else
     {
         ALOGE("rtkbt_heartbeat_cmpl_cback: Current SeqNum = %d,should SeqNum=%d, status = %d", seqnum, nextSeqNum, status);
         ALOGE("heartbeat event missing:  restart bluedroid stack\n");
         usleep(1000);
-        rtkbt_heartbeat_send_hw_error();
+        rtkbt_heartbeat_send_hw_error(status, seqnum, nextSeqNum, heartbeatCount);
     }
-   
+
 }
 
 
 static void heartbeat_timed_out()//(union sigval arg)
 {
     Rtk_Service_Data *p_buf;
-    
+    int count;
+
+    pthread_mutex_lock(&heartbeat_mutex);
     heartbeatCount++;
     if(heartbeatCount >= 3)
     {
         if(cleanupFlag == 1)
         {
             ALOGW("Already cleanup, ignore.");
+            pthread_mutex_unlock(&heartbeat_mutex);
             return;
         }
         ALOGE("heartbeat_timed_out: heartbeatCount = %d, expected nextSeqNum = %d",heartbeatCount, nextSeqNum);
         ALOGE("heartbeat_timed_out,controller may be suspend! Now restart bluedroid stack\n");
+        count = heartbeatCount;
+        pthread_mutex_unlock(&heartbeat_mutex);
         usleep(1000);
-        kill(getpid(), SIGKILL);
+        rtkbt_heartbeat_send_hw_error(0,0,nextSeqNum,count);
+
+        //kill(getpid(), SIGKILL);
         return;
     }
+    pthread_mutex_unlock(&heartbeat_mutex);
     if(heartbeatFlag)
     {
         p_buf = (Rtk_Service_Data *)malloc(sizeof(Rtk_Service_Data));
@@ -218,11 +256,10 @@ static void rtkbt_heartbeat_beginTimer_func(void)
     p_buf->parameter = NULL;
     p_buf->parameter_len = 0;
     p_buf->complete_cback = rtkbt_heartbeat_cmpl_cback;
-    
+
     Rtk_Service_Vendorcmd_Hook(p_buf,-1);
     free(p_buf);
 
-    //rtkbt_api_callbacks->BTM_VendorSpecificCommand(HCI_CMD_VNDR_HEARTBEAT,0,NULL,rtkbt_heartbeat_cmpl_cback);
     poll_timer_flush();
 }
 
@@ -234,6 +271,7 @@ void Heartbeat_cleanup()
     cleanupFlag = 1;
     poll_enable(FALSE);
     poll_cleanup();
+    pthread_mutex_destroy(&heartbeat_mutex);
 }
 
 void Heartbeat_init()
@@ -242,6 +280,7 @@ void Heartbeat_init()
     ALOGD("Heartbeat_init start");
     Heartbeat_cleanup();
     load_rtkbt_heartbeat_conf();
+    pthread_mutex_init(&heartbeat_mutex, NULL);
     heartbeatFlag = true;
     heartbeatCount = 0;
     cleanupFlag = 0;

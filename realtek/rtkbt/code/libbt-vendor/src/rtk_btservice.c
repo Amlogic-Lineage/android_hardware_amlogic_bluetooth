@@ -1,6 +1,6 @@
 /******************************************************************************
  *
- *  Copyright (C) 2009-2012 Realtek Corporation
+ *  Copyright (C) 2009-2018 Realtek Corporation.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -83,6 +83,7 @@ typedef void (*tTIMER_HANDLE_CBACK)(union sigval sigval_value);
 typedef struct Rtk_Btservice_Info
 {
     int socketfd;
+    int sig_fd[2];
     pthread_t       cmdreadythd;
     pthread_t       epollthd;
     int             current_client_sock;
@@ -127,7 +128,7 @@ typedef struct Rtk_Queue_Data
     void            (*complete_cback)(void *);
 }Rtkqueuedata;
 
-static Rtk_Btservice_Info *rtk_btservice = NULL;
+static Rtk_Btservice_Info *rtk_btservice;
 static void Rtk_Service_Send_Hwerror_Event();
 //extern void userial_recv_rawdata_hook(unsigned char *, unsigned int);
 static timer_t OsAllocateTimer(tTIMER_HANDLE_CBACK timer_callback)
@@ -293,7 +294,7 @@ void Rtk_Service_Vendorcmd_Hook(Rtk_Service_Data *RtkData, int client_sock)
 {
     Rtkqueuedata* rtkqueue_data = NULL;
     if(!rtk_btservice) {
-        ALOGE("rtkbt service is NULL");
+        ALOGE("rtkbt service is null");
         return;
     }
 
@@ -571,7 +572,7 @@ static int socket_accept(socketfd)
 {
     struct sockaddr_un un;
     socklen_t len;
-    int client_sock=0;
+    int client_sock = 0;
     len = sizeof(un);
     struct epoll_event event;
 
@@ -583,10 +584,10 @@ static int socket_accept(socketfd)
     }
     //pthread_create(&connectthread,NULL,(void *)accept_request_thread,&client_sock);
 
-    event.data.fd=client_sock;
-    event.events=EPOLLIN | EPOLLHUP | EPOLLRDHUP | EPOLLERR;
+    event.data.fd = client_sock;
+    event.events = EPOLLIN | EPOLLHUP | EPOLLRDHUP | EPOLLERR;
     //list_add(client_sock);
-    if(epoll_ctl(rtk_btservice->epoll_fd,EPOLL_CTL_ADD,client_sock,&event)==-1)
+    if(epoll_ctl(rtk_btservice->epoll_fd, EPOLL_CTL_ADD, client_sock, &event)==-1)
     {
         ALOGE("%s unable to register fd %d to epoll set: %s", __func__, client_sock, strerror(errno));
         close(client_sock);
@@ -603,21 +604,26 @@ static void *epoll_thread()
 
     while(rtk_btservice->epoll_thread_running)
     {
-        nfds=epoll_wait(rtk_btservice->epoll_fd,events,32,500);
+        nfds = epoll_wait(rtk_btservice->epoll_fd,events, 32, 500);
         if(rtk_btservice->epoll_thread_running != 0)
         {
-            if(nfds>0)
+            if(nfds > 0)
             {
-                for(i=0;i<nfds;i++)
+                for(i = 0; i < nfds; i++)
                 {
-                    if(events[i].data.fd == rtk_btservice->socketfd && events[i].events&EPOLLIN)
+                    if(events[i].data.fd == rtk_btservice->sig_fd[1]) {
+                        ALOGE("epoll_thread , receive exit signal");
+                        continue;
+                    }
+
+                    if(events[i].data.fd == rtk_btservice->socketfd && events[i].events & EPOLLIN)
                     {
-                        if(socket_accept(events[i].data.fd)<0)
+                        if(socket_accept(events[i].data.fd) < 0)
                         {
                             pthread_exit(0);
                         }
                     }
-                    else if(events[i].events&(EPOLLIN | EPOLLHUP | EPOLLRDHUP | EPOLLERR))
+                    else if(events[i].events & (EPOLLIN | EPOLLHUP | EPOLLRDHUP | EPOLLERR))
                     {
                         ALOGD("%s events[i].data.fd = %d ", __func__, events[i].data.fd);
                         Getpacket(events[i].data.fd);
@@ -664,15 +670,29 @@ static int unix_socket_start(const char *servername)
         ALOGE("%s chmod failed");
     }
     */
-    event.data.fd=rtk_btservice->socketfd;
-    event.events=EPOLLIN;
-    if(epoll_ctl(rtk_btservice->epoll_fd,EPOLL_CTL_ADD,rtk_btservice->socketfd,&event)==-1)
+    event.data.fd = rtk_btservice->socketfd;
+    event.events = EPOLLIN;
+    if(epoll_ctl(rtk_btservice->epoll_fd, EPOLL_CTL_ADD, rtk_btservice->socketfd,&event) == -1)
     {
         ALOGE("%s unable to register fd %d to epoll set: %s", __func__, rtk_btservice->socketfd, strerror(errno));
         return -1;
     }
 
+    event.data.fd = rtk_btservice->sig_fd[1];
+    event.events = EPOLLIN;
+    if(epoll_ctl(rtk_btservice->epoll_fd, EPOLL_CTL_ADD, rtk_btservice->sig_fd[1], &event) == -1)
+    {
+        ALOGE("%s unable to register signal fd %d to epoll set: %s", __func__, rtk_btservice->sig_fd[1], strerror(errno));
+        return -1;
+    }
     return 0;
+}
+
+void RTK_btservice_send_close_signal(void)
+{
+    unsigned char close_signal = 1;
+    ssize_t ret;
+    RTK_NO_INTR(ret = write(rtk_btservice->sig_fd[0], &close_signal, 1));
 }
 
 int RTK_btservice_thread_start()
@@ -684,7 +704,7 @@ int RTK_btservice_thread_start()
         return -1;
     }
 
-    rtk_btservice->cmdqueue_thread_running=1;
+    rtk_btservice->cmdqueue_thread_running = 1;
     if (pthread_create(&rtk_btservice->cmdreadythd, NULL, cmdready_thread, NULL)!=0)
     {
         ALOGE("pthread_create cmdready_thread: %s", strerror(errno));
@@ -696,9 +716,9 @@ int RTK_btservice_thread_start()
 
 void RTK_btservice_thread_stop()
 {
-    ALOGD("%s !", __func__);
     rtk_btservice->epoll_thread_running=0;
     rtk_btservice->cmdqueue_thread_running=0;
+    RTK_btservice_send_close_signal();
     sem_post(&rtk_btservice->cmdqueue_sem);
     sem_post(&rtk_btservice->cmdsend_sem);
     pthread_join(rtk_btservice->cmdreadythd, NULL);
@@ -710,12 +730,11 @@ void RTK_btservice_thread_stop()
 int RTK_btservice_init()
 {
     int ret;
-    rtk_btservice=(Rtk_Btservice_Info *)malloc(sizeof(Rtk_Btservice_Info));
+    rtk_btservice = (Rtk_Btservice_Info *)malloc(sizeof(Rtk_Btservice_Info));
 
     rtk_btservice->current_client_sock = -1;
     rtk_btservice->current_complete_cback = NULL;
     rtk_btservice->autopair_fd = -1;
-    ALOGD("%s init start!", __func__);
     hcicmd_alloc_reply_timer();
 
     sem_init(&rtk_btservice->cmdqueue_sem, 0, 0);
@@ -727,6 +746,11 @@ int RTK_btservice_init()
     {
         ALOGE("%s bt_vendor_cbacks is NULL!", __func__);
         return -1;
+    }
+
+    if((ret = socketpair(AF_UNIX, SOCK_STREAM, 0, rtk_btservice->sig_fd)) < 0) {
+        ALOGE("%s, errno : %s", __func__, strerror(errno));
+        return ret;
     }
 
     rtk_btservice->epoll_fd = epoll_create(64);
@@ -742,7 +766,7 @@ int RTK_btservice_init()
     }
 
     ret = RTK_btservice_thread_start();
-    if(ret<0)
+    if(ret < 0)
     {
         ALOGE("%s RTK_btservice_thread_start fail!", __func__);
         return -1;
@@ -756,6 +780,8 @@ void RTK_btservice_destroyed()
     RTK_btservice_thread_stop();
     close(rtk_btservice->socketfd);
     rtk_btservice->socketfd = -1;
+    close(rtk_btservice->sig_fd[0]);
+    close(rtk_btservice->sig_fd[1]);
     sem_destroy(&rtk_btservice->cmdqueue_sem);
     sem_destroy(&rtk_btservice->cmdsend_sem);
     flush_cmdqueue_hash(rtk_btservice);
