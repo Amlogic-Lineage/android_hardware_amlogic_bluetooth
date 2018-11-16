@@ -15,6 +15,7 @@ PRODUCT_COPY_FILES += hardware/amlogic/wifi/bcm_ampak/config/6255/BT/BCM4345C0.h
 PRODUCT_COPY_FILES += hardware/amlogic/wifi/bcm_ampak/config/AP6269/BT/bcm43569a2.hcd:$(TARGET_COPY_OUT_VENDOR)/etc/bluetooth/bcm43569a2.hcd
 PRODUCT_COPY_FILES += hardware/amlogic/wifi/bcm_ampak/config/AP6398/BT/BCM4359C0.hcd:$(TARGET_COPY_OUT_VENDOR)/etc/bluetooth/BCM4359C0.hcd
 PRODUCT_COPY_FILES += hardware/amlogic/wifi/bcm_ampak/config/AP62x8/bcm43569a2.hcd:$(TARGET_COPY_OUT_VENDOR)/etc/bluetooth/bcm43569a2.hcd
+PRODUCT_COPY_FILES += hardware/amlogic/wifi/bcm_ampak/config/AP6256/BT/BCM4345C5.hcd:$(TARGET_COPY_OUT_VENDOR)/etc/bluetooth/BCM4345C5.hcd
 
 
 PRODUCT_COPY_FILES += frameworks/native/data/etc/android.hardware.bluetooth.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.bluetooth.xml \
