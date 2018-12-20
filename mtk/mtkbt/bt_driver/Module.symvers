@@ -1,0 +1,6 @@
+0x3893234e	btmtk_enable_hs	/mnt/nfsroot/kuibao.zhang/p-amlogic/hardware/amlogic/bluetooth/mtk/mtkbt/bt_driver/btmtksdio	EXPORT_SYMBOL_GPL
+0x193d354e	btmtk_interrupt	/mnt/nfsroot/kuibao.zhang/p-amlogic/hardware/amlogic/bluetooth/mtk/mtkbt/bt_driver/btmtksdio	EXPORT_SYMBOL_GPL
+0x5e8a02fa	btmtk_sdio_bt_trigger_core_dump	/mnt/nfsroot/kuibao.zhang/p-amlogic/hardware/amlogic/bluetooth/mtk/mtkbt/bt_driver/btmtksdio	EXPORT_SYMBOL
+0x06e3a298	btmtk_sdio_notify_wlan_remove_end	/mnt/nfsroot/kuibao.zhang/p-amlogic/hardware/amlogic/bluetooth/mtk/mtkbt/bt_driver/btmtksdio	EXPORT_SYMBOL
+0xe79c8d96	btmtk_remove_card	/mnt/nfsroot/kuibao.zhang/p-amlogic/hardware/amlogic/bluetooth/mtk/mtkbt/bt_driver/btmtksdio	EXPORT_SYMBOL_GPL
+0x3d143e20	btmtk_add_card	/mnt/nfsroot/kuibao.zhang/p-amlogic/hardware/amlogic/bluetooth/mtk/mtkbt/bt_driver/btmtksdio	EXPORT_SYMBOL_GPL
