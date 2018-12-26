@@ -267,7 +267,7 @@ int ismod_bt_driver()
     }
     ALOGE("%s: set vendor.sys.mtkbtdriver true\n", __FUNCTION__);
     property_set(DRIVER_PROP_NAME,"true");
-    
+    sleep(2);
     return 0;
 }
 

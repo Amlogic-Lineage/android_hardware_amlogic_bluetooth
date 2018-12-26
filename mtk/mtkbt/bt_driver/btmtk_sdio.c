@@ -1774,7 +1774,7 @@ static int btmtk_sdio_set_i2s(void)
 {
 	int ret = 0;
 	u32 pinmux = 0;
-
+	retrun 0;
 	ret = btmtk_sdio_set_i2s_slave();
 	if (ret) {
 		pr_err("btmtk_sdio_set_i2s_slave error(%d)\n", ret);
