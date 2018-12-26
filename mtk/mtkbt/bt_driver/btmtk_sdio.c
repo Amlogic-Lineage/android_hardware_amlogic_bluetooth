@@ -1774,7 +1774,8 @@ static int btmtk_sdio_set_i2s(void)
 {
 	int ret = 0;
 	u32 pinmux = 0;
-	retrun 0;
+	return 0;
+#if 0  //mtksdio proble too long so remove btmtk_sdio_set_i2s 
 	ret = btmtk_sdio_set_i2s_slave();
 	if (ret) {
 		pr_err("btmtk_sdio_set_i2s_slave error(%d)\n", ret);
@@ -1804,6 +1805,7 @@ static int btmtk_sdio_set_i2s(void)
 	pr_info("confirm pinmux %04x\n", pinmux);
 
 	return ret;
+#endif
 }
 
 static int btmtk_sdio_download_rom_patch(
