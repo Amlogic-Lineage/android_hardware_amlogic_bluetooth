@@ -135,6 +135,8 @@ static void load_rtkbt_heartbeat_conf()
 
 static void rtkbt_heartbeat_send_hw_error(uint8_t status, uint16_t seqnum, uint16_t next_seqnum, int heartbeatCnt)
 {
+    if(!heartbeatFlag)
+      return;
     unsigned char p_buf[100];
     int length;
     p_buf[0] = HCIT_TYPE_EVENT;//event
@@ -160,6 +162,9 @@ static void rtkbt_heartbeat_cmpl_cback (void *p_params)
     uint16_t seqnum;
     HC_BT_HDR *p_evt_buf = p_params;
     //uint8_t  *p = NULL;
+
+    if(!heartbeatFlag)
+      return;
     if(p_params != NULL)
     {
         p_evt_buf = (HC_BT_HDR *) p_params;
@@ -190,6 +195,8 @@ static void heartbeat_timed_out()//(union sigval arg)
     Rtk_Service_Data *p_buf;
     int count;
 
+    if(!heartbeatFlag)
+      return;
     pthread_mutex_lock(&heartbeat_mutex);
     heartbeatCount++;
     if(heartbeatCount >= 3)
@@ -224,7 +231,7 @@ static void heartbeat_timed_out()//(union sigval arg)
         p_buf->parameter_len = 0;
         p_buf->complete_cback = rtkbt_heartbeat_cmpl_cback;
 
-        Rtk_Service_Vendorcmd_Hook(p_buf,-1);
+        Rtk_Service_Vendorcmd_Hook(p_buf, -1);
         free(p_buf);
         poll_timer_flush();
     }
@@ -257,7 +264,7 @@ static void rtkbt_heartbeat_beginTimer_func(void)
     p_buf->parameter_len = 0;
     p_buf->complete_cback = rtkbt_heartbeat_cmpl_cback;
 
-    Rtk_Service_Vendorcmd_Hook(p_buf,-1);
+    Rtk_Service_Vendorcmd_Hook(p_buf, -1);
     free(p_buf);
 
     poll_timer_flush();
@@ -265,13 +272,14 @@ static void rtkbt_heartbeat_beginTimer_func(void)
 
 void Heartbeat_cleanup()
 {
+    if(!heartbeatFlag)
+      return;
     heartbeatFlag = false;
     nextSeqNum = 1;
     heartbeatCount = 0;
     cleanupFlag = 1;
     poll_enable(FALSE);
     poll_cleanup();
-    pthread_mutex_destroy(&heartbeat_mutex);
 }
 
 void Heartbeat_init()

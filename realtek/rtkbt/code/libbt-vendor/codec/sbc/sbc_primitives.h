@@ -36,7 +36,7 @@
 #define SBC_ALWAYS_INLINE inline
 #endif
 
-struct sbc_encoder_state {
+struct SBC_ALIGNED sbc_encoder_state {
 	int position;
 	/* Number of consecutive blocks handled by the encoder */
 	uint8_t increment;

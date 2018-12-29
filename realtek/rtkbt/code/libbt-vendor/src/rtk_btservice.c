@@ -128,6 +128,7 @@ typedef struct Rtk_Queue_Data
     void            (*complete_cback)(void *);
 }Rtkqueuedata;
 
+extern void rtk_vendor_cmd_to_fw(uint16_t opcode, uint8_t parameter_len, uint8_t* parameter, tINT_CMD_CBACK p_cback);
 static Rtk_Btservice_Info *rtk_btservice;
 static void Rtk_Service_Send_Hwerror_Event();
 //extern void userial_recv_rawdata_hook(unsigned char *, unsigned int);
@@ -324,15 +325,15 @@ static void Rtk_Service_Cmd_Event_Cback(void *p_mem)
     //ALOGE("%s p_mem = %x,%x,%x,%x,%x,%x!", __func__,a[0],a[1],a[2],a[3],a[4],a[5]);
     if(p_mem != NULL)
     {
-        if(rtk_btservice->current_complete_cback!=NULL)
+        if(rtk_btservice->current_complete_cback != NULL)
         {
-            rtk_btservice->current_complete_cback(p_mem);
+            (*rtk_btservice->current_complete_cback)(p_mem);
         }
         else
         {
             ALOGE("%s current_complete_cback is not exist!", __func__);
         }
-        rtk_btservice->current_complete_cback=NULL;
+        rtk_btservice->current_complete_cback = NULL;
         hcicmd_stop_reply_timer();
         sem_post(&rtk_btservice->cmdsend_sem);
     }
@@ -350,7 +351,7 @@ static void Rtk_Service_Send_Hwerror_Event()
 
 }
 
-static void *cmdready_thread()
+static void* cmdready_thread()
 {
     //Rtkqueuedata* rtk_data;
 
@@ -375,42 +376,18 @@ static void *cmdready_thread()
             pthread_mutex_unlock(&rtk_btservice->cmdqueue_mutex);
 
             if(desc) {
-                HC_BT_HDR  *p_buf = NULL;
-                p_buf = (HC_BT_HDR *) bt_vendor_cbacks->alloc(BT_HC_HDR_SIZE + HCI_CMD_PREAMBLE_SIZE + desc->parameter_len);
-
-                if(NULL == p_buf)
-                {
-                    ALOGE("rtk_vendor_cmd_to_fw: HC_BT_HDR alloc error");
-                    pthread_exit(0);
-                }
-                p_buf->event = MSG_STACK_TO_HC_HCI_CMD;
-                p_buf->offset = 0;
-                p_buf->len = HCI_CMD_PREAMBLE_SIZE + desc->parameter_len;
-                p_buf->layer_specific = 0;
-
-                uint8_t *p = (uint8_t *) (p_buf + 1);
-                UINT16_TO_STREAM(p, desc->opcode);
-                *p++ = desc->parameter_len;
-
                 if(desc->opcode == 0xfc77)
                 {
                     rtk_btservice->autopair_fd = desc->client_sock;
                 }
 
-                if(desc->parameter_len > 0)
-                {
-                    memcpy(p, desc->parameter, desc->parameter_len);
-                }
-                if(desc->opcode != 0xfc94 )
+                if(desc->opcode != 0xfc94)
                     ALOGD("%s, transmit_command Opcode:%x",__func__, desc->opcode);
                 rtk_btservice->current_client_sock = desc->client_sock;
                 rtk_btservice->current_complete_cback = desc->complete_cback;
                 //bt_vendor_cbacks->xmit_cb(desc->opcode, p_buf, desc->complete_cback);
-                if(bt_vendor_cbacks != NULL)
-                {
-                    bt_vendor_cbacks->xmit_cb(desc->opcode, p_buf, Rtk_Service_Cmd_Event_Cback);
-                    hcicmd_start_reply_timer();
-                }
+                rtk_vendor_cmd_to_fw(desc->opcode, desc->parameter_len, desc->parameter, Rtk_Service_Cmd_Event_Cback);
+                hcicmd_start_reply_timer();
                 if(desc->parameter_len > 0)
                     free(desc->parameter);
             }

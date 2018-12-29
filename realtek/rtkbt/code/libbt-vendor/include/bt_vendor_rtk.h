@@ -57,7 +57,7 @@
 #define RTKBT_TRANS_H4          0x20
 #define RTKBT_TRANS_H5          0x10
 #define RTKBT_TRANS_UART        0x01
-#define RTKBT_TRANS_USB         0x20
+#define RTKBT_TRANS_USB         0x02
 
 #ifndef FALSE
 #define FALSE  0

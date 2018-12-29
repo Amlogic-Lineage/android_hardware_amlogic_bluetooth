@@ -43,12 +43,6 @@
 #define MAX_ORG_CONFIG_SIZE     (0x100*14)
 #define MAX_ALT_CONFIG_SIZE     (0x100*2)
 
-#define STREAM_TO_UINT8(u8, p) \
-  {                            \
-    (u8) = (uint8_t)(*(p));    \
-    (p) += 1;                  \
-  }
-
 struct rtk_bt_vendor_config_entry{
     uint16_t offset;
     uint8_t entry_len;
@@ -187,6 +181,7 @@ typedef struct
 #define ROM_LMP_8723b               0x8723
 #define ROM_LMP_8821a               0X8821
 #define ROM_LMP_8761a               0X8761
+#define ROM_LMP_8761b               0X8761
 #define ROM_LMP_8703a               0x8723
 #define ROM_LMP_8763a               0x8763
 #define ROM_LMP_8703b               0x8703

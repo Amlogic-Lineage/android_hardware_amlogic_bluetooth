@@ -104,7 +104,10 @@ static patch_info patch_table[] = {
     {0x8723,            ~(HCI_VERSION_MASK_21),  ~(1<<0xd),             CHIP_TYPE_MASK_ALL,  1<<1,                  "rtl8723bs_fw",         "rtl8723bs_config",     CONFIG_MAC_OFFSET_GEN_1_2,  MAX_PATCH_SIZE_24K},     //Rtl8723BS
 //    {0x8723,            ~(HCI_VERSION_MASK_21),  ~(1<<0xd),             CHIP_TYPE_MASK_ALL,  1<<1,                  "rtl8723bs_VQ0_fw",     "rtl8723bs_VQ0_config", CONFIG_MAC_OFFSET_GEN_1_2}, //Rtl8723BS_VQ0
     {0x8821,            HCI_VERSION_MASK_ALL,    ~(1<<0xc),             CHIP_TYPE_MASK_ALL,  1<<2,                  "rtl8821as_fw",         "rtl8821as_config",     CONFIG_MAC_OFFSET_GEN_1_2,  MAX_PATCH_SIZE_24K},     //Rtl8821AS
-    {0x8761,            HCI_VERSION_MASK_ALL,    HCI_REVISION_MASK_ALL, CHIP_TYPE_MASK_ALL,  1<<3,                  "rtl8761at_fw",         "rtl8761at_config",     CONFIG_MAC_OFFSET_GEN_1_2,  MAX_PATCH_SIZE_24K},     //Rtl8761AW
+//  {0x8761,            HCI_VERSION_MASK_ALL,    HCI_REVISION_MASK_ALL, CHIP_TYPE_MASK_ALL,  1<<3,                  "rtl8761at_fw",         "rtl8761at_config",     CONFIG_MAC_OFFSET_GEN_1_2,  MAX_PATCH_SIZE_24K},     //Rtl8761AW
+    {0x8761,            HCI_VERSION_MASK_ALL,    ~(1<<0xb),             CHIP_TYPE_MASK_ALL,  1<<3,                  "rtl8761at_fw",         "rtl8761at_config",     CONFIG_MAC_OFFSET_GEN_1_2,  MAX_PATCH_SIZE_24K},     //Rtl8761AW
+    {0x8761,            HCI_VERSION_MASK_ALL,    (1<<0xb),              CHIP_TYPE_MASK_ALL,  1<<14,                 "rtl8761bt_fw",         "rtl8761bt_config",     CONFIG_MAC_OFFSET_GEN_4PLUS,  MAX_PATCH_SIZE_40K},     //Rtl8761BW
+
     {0x8723,            HCI_VERSION_MASK_21,     HCI_REVISION_MASK_ALL, CHIP_TYPE_MASK_ALL,  1<<4,                  "rtl8703as_fw",         "rtl8703as_config",     CONFIG_MAC_OFFSET_GEN_1_2,  MAX_PATCH_SIZE_24K},     //Rtl8703AS
 
     {0x8703,            HCI_VERSION_MASK_ALL,    HCI_REVISION_MASK_ALL, 1<<7,                1<<6,                  "rtl8703bs_fw",         "rtl8703bs_config",     CONFIG_MAC_OFFSET_GEN_3PLUS,  MAX_PATCH_SIZE_24K},     //Rtl8703BS
@@ -590,7 +593,7 @@ static uint32_t rtk_parse_config_file(unsigned char** config_buf, size_t* filele
             }
             case 0x01be:
             {
-                if(mac_offset == CONFIG_MAC_OFFSET_GEN_3PLUS)
+                if(mac_offset == CONFIG_MAC_OFFSET_GEN_3PLUS || mac_offset == CONFIG_MAC_OFFSET_GEN_4PLUS)
                 {
                     p = (uint8_t *)entry->entry_data;
                     STREAM_TO_UINT8(heartbeat_buf, p);

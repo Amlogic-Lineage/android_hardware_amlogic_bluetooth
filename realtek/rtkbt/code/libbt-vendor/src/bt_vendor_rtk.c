@@ -26,7 +26,7 @@
 
 #undef NDEBUG
 #define LOG_TAG "libbt_vendor"
-#define RTKBT_RELEASE_NAME "20181116_BT_ANDROID_9.0"
+#define RTKBT_RELEASE_NAME "20181224_BT_ANDROID_9.0"
 #include <utils/Log.h>
 #include "bt_vendor_rtk.h"
 #include "upio.h"
@@ -327,6 +327,7 @@ static void load_rtkbt_conf()
     }
     else {
         rtkbt_transtype |= RTKBT_TRANS_USB;
+        rtkbt_transtype |= RTKBT_TRANS_H4;
     }
 }
 

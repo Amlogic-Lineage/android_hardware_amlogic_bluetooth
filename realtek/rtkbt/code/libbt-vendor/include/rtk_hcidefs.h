@@ -26,6 +26,8 @@
 #define HCI_PROTO_VERSION_4_0 0x06      /* Version for BT spec 4.0          */
 #define HCI_PROTO_VERSION_4_1 0x07      /* Version for BT spec 4.1          */
 #define HCI_PROTO_VERSION_4_2 0x08      /* Version for BT spec 4.2          */
+#define HCI_PROTO_VERSION_5_0 0x09      /* Version for BT spec 5.0          */
+
 
 /*
 **  Definitions for HCI groups
@@ -2647,6 +2649,50 @@ typedef struct
 #define HCI_SUPP_COMMANDS_RLE_RC_CONN_PARAM_UPD_NEG_RPY_MASK          0x20
 #define HCI_SUPP_COMMANDS_LE_RC_CONN_PARAM_UPD_NEG_RPY_OFF           33
 #define HCI_LE_RC_CONN_PARAM_UPD_NEG_RPY_SUPPORTED(x)      ((x)[HCI_SUPP_COMMANDS_LE_RC_CONN_PARAM_UPD_NEG_RPY_OFF] & HCI_SUPP_COMMANDS_RLE_RC_CONN_PARAM_UPD_NEG_RPY_MASK)
+
+
+#define HCI_DATA_EVENT_MASK 3
+#define HCI_DATA_EVENT_OFFSET 12
+
+#define RTK_HANDLE_MASK 0x0FFF
+#define RTK_NONF_START_PACKET_BOUNDARY 0
+#define RTK_START_PACKET_BOUNDARY 2
+#define RTK_CONTINUATION_PACKET_BOUNDARY 1
+#define RTK_L2CAP_HEADER_PDU_LEN_SIZE 2
+#define RTK_L2CAP_HEADER_CID_SIZE 2
+#define RTK_L2CAP_HEADER_SIZE (RTK_L2CAP_HEADER_PDU_LEN_SIZE + RTK_L2CAP_HEADER_CID_SIZE)
+
+#define RTK_GET_BOUNDARY_FLAG(handle) (((handle) >> 12) & 0x0003)
+
+    // 2 bytes for opcode, 1 byte for parameter length (Volume 2, Part E, 5.4.1)
+#define COMMAND_PREAMBLE_SIZE 3
+    // 2 bytes for handle, 2 bytes for data length (Volume 2, Part E, 5.4.2)
+#define ACL_PREAMBLE_SIZE 4
+    // 2 bytes for handle, 1 byte for data length (Volume 2, Part E, 5.4.3)
+#define SCO_PREAMBLE_SIZE 3
+    // 1 byte for event code, 1 byte for parameter length (Volume 2, Part E, 5.4.4)
+#define EVENT_PREAMBLE_SIZE 2
+
+#define HCI_PACKET_TYPE_TO_INDEX(type) ((type) - 1)
+
+#define COMMON_DATA_LENGTH_INDEX 3
+
+#define EVENT_DATA_LENGTH_INDEX 2
+
+typedef struct {
+  uint8_t hci_version;
+  uint16_t hci_revision;
+  uint8_t lmp_version;
+  uint16_t manufacturer;
+  uint16_t lmp_subversion;
+} rtkbt_version_t;
+
+typedef struct {
+  uint8_t adverting_type;
+  bool    adverting_enable;
+  bool    adverting_start;
+  bool    connetion_enable;
+} rtkbt_lescn_t;
 
 #endif
 

@@ -27,7 +27,7 @@
  ******************************************************************************/
 
 #define LOG_TAG "bt_hwcfg"
-#define RTKBT_RELEASE_NAME "20181116_BT_ANDROID_9.0"
+#define RTKBT_RELEASE_NAME "20181224_BT_ANDROID_9.0"
 
 #include <utils/Log.h>
 #include <sys/types.h>

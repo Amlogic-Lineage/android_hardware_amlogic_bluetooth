@@ -42,6 +42,7 @@
 
 #include "bt_vendor_lib.h"
 #include "hardware.h"
+#include "rtk_common.h"
 
 /******************************************************************************
 **  Constants &  Macros
@@ -115,6 +116,7 @@ static usb_patch_info usb_fw_patch_table[] = {
 { 0x0BDA, 0xB761, 0x8761, 0, 0, "mp_rtl8761a_fw", "rtl8761au_fw", "rtl8761a_config", NULL, 0 ,CONFIG_MAC_OFFSET_GEN_1_2, MAX_PATCH_SIZE_24K}, /* RTL8761AUV only */
 { 0x0BDA, 0x8761, 0x8761, 0, 0, "mp_rtl8761a_fw", "rtl8761au8192ee_fw", "rtl8761a_config", NULL, 0 ,CONFIG_MAC_OFFSET_GEN_1_2, MAX_PATCH_SIZE_24K}, /* RTL8761AU + 8192EE for LI */
 { 0x0BDA, 0x8A60, 0x8761, 0, 0, "mp_rtl8761a_fw", "rtl8761au8812ae_fw", "rtl8761a_config", NULL, 0 ,CONFIG_MAC_OFFSET_GEN_1_2, MAX_PATCH_SIZE_24K}, /* RTL8761AU + 8812AE */
+{ 0x0BDA, 0x8771, 0x8761, 0, 0, "mp_rtl8761b_fw", "rtl8761b_fw", "rtl8761b_config", NULL, 0 ,CONFIG_MAC_OFFSET_GEN_4PLUS, MAX_PATCH_SIZE_40K}, /* RTL8761BU */
 
 { 0x0BDA, 0x8821, 0x8821, 0, 0, "mp_rtl8821a_fw", "rtl8821a_fw", "rtl8821a_config", NULL, 0 ,CONFIG_MAC_OFFSET_GEN_1_2, MAX_PATCH_SIZE_24K}, /* RTL8821AE */
 { 0x0BDA, 0x0821, 0x8821, 0, 0, "mp_rtl8821a_fw", "rtl8821a_fw", "rtl8821a_config", NULL, 0 ,CONFIG_MAC_OFFSET_GEN_1_2, MAX_PATCH_SIZE_24K}, /* RTL8821AE */
@@ -129,7 +131,7 @@ static usb_patch_info usb_fw_patch_table[] = {
 { 0x0BDA, 0xB023, 0x8822, 0, 0, "mp_rtl8822b_fw", "rtl8822b_fw", "rtl8822b_config", NULL, 0 ,CONFIG_MAC_OFFSET_GEN_3PLUS, MAX_PATCH_SIZE_24K}, /* RTL8822BE */
 { 0x0BDA, 0xB703, 0x8703, 0, 0, "mp_rtl8723c_fw", "rtl8723c_fw", "rtl8723c_config", NULL, 0 ,CONFIG_MAC_OFFSET_GEN_3PLUS, MAX_PATCH_SIZE_24K}, /* RTL8723CU */
 { 0x0BDA, 0xC82C, 0x8822, 0, 0, "mp_rtl8822c_fw", "rtl8822c_fw", "rtl8822c_config", NULL, 0 ,CONFIG_MAC_OFFSET_GEN_4PLUS, MAX_PATCH_SIZE_40K}, /* RTL8822CU */
-
+{ 0x0BDA, 0xC822, 0x8822, 0, 0, "mp_rtl8822c_fw", "rtl8822c_fw", "rtl8822c_config", NULL, 0 ,CONFIG_MAC_OFFSET_GEN_4PLUS, MAX_PATCH_SIZE_40K}, /* RTL8822CE */
 /* todo: RTL8703BU */
 
 { 0x0BDA, 0xD723, 0x8723, 0, 0, "mp_rtl8723d_fw", "rtl8723d_fw", "rtl8723d_config", NULL, 0 ,CONFIG_MAC_OFFSET_GEN_3PLUS, MAX_PATCH_SIZE_40K}, /* RTL8723DU */
@@ -159,6 +161,7 @@ uint16_t usb_project_id[] = {
     ROM_LMP_NONE,
     ROM_LMP_NONE,
     ROM_LMP_8822c,
+    ROM_LMP_8761b,
     ROM_LMP_NONE
 };
 //signature: realtech
@@ -334,7 +337,7 @@ static void rtk_usb_parse_config_file(unsigned char** config_buf, size_t* filele
             }
             case 0x01be:
             {
-                if(mac_offset == CONFIG_MAC_OFFSET_GEN_3PLUS)
+                if(mac_offset == CONFIG_MAC_OFFSET_GEN_3PLUS || mac_offset == CONFIG_MAC_OFFSET_GEN_4PLUS)
                 {
                     p = (uint8_t *)entry->entry_data;
                     STREAM_TO_UINT8(heartbeat_buf, p);

@@ -34,7 +34,7 @@
 *
 ******************************************************************************/
 #define LOG_TAG "rtk_parse"
-#define RTKBT_RELEASE_NAME "20181116_BT_ANDROID_9.0"
+#define RTKBT_RELEASE_NAME "20181224_BT_ANDROID_9.0"
 
 #include <utils/Log.h>
 #include <stdlib.h>
@@ -196,6 +196,7 @@ typedef struct RTK_COEX_INFO {
     RT_LIST_ENTRY   list;
     HC_BT_HDR  *    p_buf;
     uint16_t        opcode;
+    tINT_CMD_CBACK  p_cback;
 }tRTK_COEX_INFO;
 
 //profile info data
@@ -222,6 +223,7 @@ typedef struct RTK_PROF {
     RT_LIST_HEAD    conn_hash;      //hash for connections
     RT_LIST_HEAD    profile_list;   //hash for profile info
     RT_LIST_HEAD    coex_list;
+    tINT_CMD_CBACK  current_cback;
     pthread_mutex_t profile_mutex;
     pthread_mutex_t coex_mutex;
     pthread_mutex_t btwifi_mutex;
@@ -835,8 +837,14 @@ static void rtk_cmd_complete_cback(void *p_mem)
     }
     pthread_mutex_unlock(&rtk_prof.coex_mutex);
 
+    if(rtk_prof.current_cback) {
+        rtk_prof.current_cback(p_mem);
+        rtk_prof.current_cback = NULL;
+    }
+
     if(desc) {
         ALOGE("%s, transmit_command Opcode:%x",__func__, desc->opcode);
+        rtk_prof.current_cback = desc->p_cback;
         bt_vendor_cbacks->xmit_cb(desc->opcode, desc->p_buf, rtk_cmd_complete_cback);
     }
 
@@ -844,7 +852,7 @@ static void rtk_cmd_complete_cback(void *p_mem)
     return;
 }
 
-void rtk_vendor_cmd_to_fw(uint16_t opcode, uint8_t parameter_len, uint8_t* parameter)
+void rtk_vendor_cmd_to_fw(uint16_t opcode, uint8_t parameter_len, uint8_t* parameter, tINT_CMD_CBACK p_cback)
 {
     HC_BT_HDR  *p_buf = NULL;
 
@@ -859,6 +867,7 @@ void rtk_vendor_cmd_to_fw(uint16_t opcode, uint8_t parameter_len, uint8_t* param
         ALOGE("rtk_vendor_cmd_to_fw: HC_BT_HDR alloc error");
         return;
     }
+    memset(p_buf, 0, (BT_HC_HDR_SIZE + HCI_CMD_PREAMBLE_SIZE + parameter_len));
     p_buf->event = MSG_STACK_TO_HC_HCI_CMD;
     p_buf->offset = 0;
     p_buf->len = HCI_CMD_PREAMBLE_SIZE + parameter_len;
@@ -866,20 +875,21 @@ void rtk_vendor_cmd_to_fw(uint16_t opcode, uint8_t parameter_len, uint8_t* param
 
     uint8_t *p = (uint8_t *) (p_buf + 1);
     UINT16_TO_STREAM(p, opcode);
-    RtkLogMsg("rtk_vendor_cmd_to_fw: Opcode:%x",opcode);
+    *p++ = parameter_len;
+    RtkLogMsg("rtk_vendor_cmd_to_fw: Opcode:%x, parameter_len = %d",opcode, parameter_len);
 
     if(parameter_len > 0)
     {
-        *p++ = parameter_len;
         memcpy(p, parameter, parameter_len);
     }
     if(bt_vendor_cbacks)
     {
-        RtkLogMsg("begin transmit_command Opcode:%x",opcode);
         pthread_mutex_lock(&rtk_prof.coex_mutex);
         if(!coex_cmd_send) {
             coex_cmd_send = true;
+            RtkLogMsg("begin transmit_command Opcode:%x",opcode);
             pthread_mutex_unlock(&rtk_prof.coex_mutex);
+            rtk_prof.current_cback = p_cback;
             bt_vendor_cbacks->xmit_cb(opcode, p_buf, rtk_cmd_complete_cback);
         }
         else {
@@ -894,6 +904,7 @@ void rtk_vendor_cmd_to_fw(uint16_t opcode, uint8_t parameter_len, uint8_t* param
 
             pcoex_info->p_buf = p_buf;
             pcoex_info->opcode = opcode;
+            pcoex_info->p_cback = p_cback;
 
             ListAddToTail(&(pcoex_info->list), &(rtk_prof.coex_list));
             pthread_mutex_unlock(&rtk_prof.coex_mutex);
@@ -953,7 +964,7 @@ void rtk_notify_profileinfo_to_fw()
     *p++ = rtk_prof.profile_status;
     RtkLogMsg("rtk_notify_profileinfo_to_fw, profile_status is %x",rtk_prof.profile_status);
 
-    rtk_vendor_cmd_to_fw(HCI_VENDOR_SET_PROFILE_REPORT_COMMAND, buffer_size, p_buf);
+    rtk_vendor_cmd_to_fw(HCI_VENDOR_SET_PROFILE_REPORT_COMMAND, buffer_size, p_buf, NULL);
 
     free(p_buf);
 
@@ -1304,7 +1315,7 @@ void packets_count(uint16_t handle, uint16_t scid, uint16_t length, uint8_t dire
                 bitpool = sbc_header->bitpool;
                 print_sbc_header(sbc_header);
                 RtkLogMsg("rtp: v %u, cc %u, pt %u", rtph->v, rtph->cc, rtph->pt);
-                rtk_vendor_cmd_to_fw(HCI_VENDOR_ADD_BITPOOL_FW, 1, &bitpool);
+                rtk_vendor_cmd_to_fw(HCI_VENDOR_ADD_BITPOOL_FW, 1, &bitpool, NULL);
             }
             rtk_prof.a2dp_packet_count++;
         }
@@ -1325,7 +1336,7 @@ static void timeout_handler(int signo, siginfo_t * info, void *context)
         {
             uint8_t temp_cmd[1];
             temp_cmd[0] = HCI_VENDOR_SUB_CMD_BT_REPORT_CONN_SCO_INQ_INFO;
-            rtk_vendor_cmd_to_fw(HCI_VENDOR_MAILBOX_CMD, 1, temp_cmd);
+            rtk_vendor_cmd_to_fw(HCI_VENDOR_MAILBOX_CMD, 1, temp_cmd, NULL);
         }
     }
     else if (signo == TIMER_A2DP_PACKET_COUNT)
@@ -1728,7 +1739,7 @@ static void rtk_handle_bt_info_control(uint8_t* p)
     temp_cmd[0] = HCI_VENDOR_SUB_CMD_BT_AUTO_REPORT_ENABLE;
     temp_cmd[1] = 1;
     temp_cmd[2] = info->autoreport_enable;
-    rtk_vendor_cmd_to_fw(HCI_VENDOR_MAILBOX_CMD, 3, temp_cmd);
+    rtk_vendor_cmd_to_fw(HCI_VENDOR_MAILBOX_CMD, 3, temp_cmd, NULL);
 
     rtk_notify_info_to_wifi(HOST_RESPONSE, 0, NULL);
 }
@@ -1755,7 +1766,7 @@ static void rtk_handle_bt_coex_control(uint8_t* p)
             temp_cmd[0] = HCI_VENDOR_SUB_CMD_BT_ENABLE_IGNORE_WLAN_ACT_CMD;
             temp_cmd[1] = 1;
             temp_cmd[2] = value;
-            rtk_vendor_cmd_to_fw(HCI_VENDOR_MAILBOX_CMD, 3, temp_cmd);
+            rtk_vendor_cmd_to_fw(HCI_VENDOR_MAILBOX_CMD, 3, temp_cmd, NULL);
             break;
         }
 
@@ -1768,7 +1779,7 @@ static void rtk_handle_bt_coex_control(uint8_t* p)
             temp_cmd[0] = HCI_VENDOR_SUB_CMD_SET_BT_LNA_CONSTRAINT;
             temp_cmd[1] = 1;
             temp_cmd[2] = value;
-            rtk_vendor_cmd_to_fw(HCI_VENDOR_MAILBOX_CMD, 3, temp_cmd);
+            rtk_vendor_cmd_to_fw(HCI_VENDOR_MAILBOX_CMD, 3, temp_cmd, NULL);
             break;
         }
 
@@ -1781,7 +1792,7 @@ static void rtk_handle_bt_coex_control(uint8_t* p)
             temp_cmd[0] = HCI_VENDOR_SUB_CMD_WIFI_FORCE_TX_POWER_CMD;
             temp_cmd[1] = 1;
             temp_cmd[2] = power_decrease;
-            rtk_vendor_cmd_to_fw(HCI_VENDOR_MAILBOX_CMD, 3, temp_cmd);
+            rtk_vendor_cmd_to_fw(HCI_VENDOR_MAILBOX_CMD, 3, temp_cmd, NULL);
             break;
         }
 
@@ -1794,7 +1805,7 @@ static void rtk_handle_bt_coex_control(uint8_t* p)
             temp_cmd[0] = HCI_VENDOR_SUB_CMD_SET_BT_PSD_MODE;
             temp_cmd[1] = 1;
             temp_cmd[2] = psd_mode;
-            rtk_vendor_cmd_to_fw(HCI_VENDOR_MAILBOX_CMD, 3, temp_cmd);
+            rtk_vendor_cmd_to_fw(HCI_VENDOR_MAILBOX_CMD, 3, temp_cmd, NULL);
             break;
         }
 
@@ -1806,7 +1817,7 @@ static void rtk_handle_bt_coex_control(uint8_t* p)
             temp_cmd[0] = HCI_VENDOR_SUB_CMD_WIFI_CHANNEL_AND_BANDWIDTH_CMD;
             temp_cmd[1] = 3;
             memcpy(temp_cmd+2, p, 3);//wifi_state, wifi_centralchannel, chnnels_btnotuse
-            rtk_vendor_cmd_to_fw(HCI_VENDOR_MAILBOX_CMD, 5, temp_cmd);
+            rtk_vendor_cmd_to_fw(HCI_VENDOR_MAILBOX_CMD, 5, temp_cmd, NULL);
             break;
         }
 
@@ -1821,7 +1832,7 @@ static void rtk_handle_bt_coex_control(uint8_t* p)
             temp_cmd[1] = 2;
             temp_cmd[2] = rtk_prof.piconet_id;
             temp_cmd[3] = rtk_prof.mode;
-            rtk_vendor_cmd_to_fw(HCI_VENDOR_MAILBOX_CMD, 4, temp_cmd);
+            rtk_vendor_cmd_to_fw(HCI_VENDOR_MAILBOX_CMD, 4, temp_cmd, NULL);
             break;
         }
 
@@ -1837,7 +1848,7 @@ static void rtk_handle_bt_coex_control(uint8_t* p)
                 temp_cmd[1] = 5;
                 temp_cmd[2] = *p++;
                 memcpy(temp_cmd+3, p, 4);
-                rtk_vendor_cmd_to_fw(HCI_VENDOR_MAILBOX_CMD, 7, temp_cmd);
+                rtk_vendor_cmd_to_fw(HCI_VENDOR_MAILBOX_CMD, 7, temp_cmd, NULL);
             }
             else //write
             {
@@ -1846,7 +1857,7 @@ static void rtk_handle_bt_coex_control(uint8_t* p)
                 temp_cmd[1] = 5;
                 temp_cmd[2] = *p++;
                 memcpy(temp_cmd+3, p, 8);
-                rtk_vendor_cmd_to_fw(HCI_VENDOR_MAILBOX_CMD, 11, temp_cmd);
+                rtk_vendor_cmd_to_fw(HCI_VENDOR_MAILBOX_CMD, 11, temp_cmd, NULL);
             }
             break;
         }
@@ -2263,7 +2274,7 @@ static void rtk_handle_vender_mailbox_cmp_evt(uint8_t* p, uint8_t len)
                 temp_cmd[1] = 2;
                 temp_cmd[2] = rtk_prof.piconet_id;
                 temp_cmd[3] = rtk_prof.mode;
-                rtk_vendor_cmd_to_fw(HCI_VENDOR_MAILBOX_CMD, 4, temp_cmd);
+                rtk_vendor_cmd_to_fw(HCI_VENDOR_MAILBOX_CMD, 4, temp_cmd, NULL);
             }
             else //fail
             {
@@ -2282,7 +2293,7 @@ static void rtk_handle_vender_mailbox_cmp_evt(uint8_t* p, uint8_t len)
                 temp_cmd[1] = 2;
                 temp_cmd[2] = rtk_prof.piconet_id;
                 temp_cmd[3] = rtk_prof.mode;
-                rtk_vendor_cmd_to_fw(HCI_VENDOR_MAILBOX_CMD, 4, temp_cmd);
+                rtk_vendor_cmd_to_fw(HCI_VENDOR_MAILBOX_CMD, 4, temp_cmd, NULL);
             }
             else //fail
             {
@@ -2766,7 +2777,7 @@ void rtk_parse_internal_event_intercept(uint8_t *p_msg)
 
 void rtk_parse_command(uint8_t *pp)
 {
-    uint8_t *p =pp;
+    uint8_t *p = pp;
     uint16_t cmd;
     STREAM_TO_UINT16(cmd, p);
 
@@ -2817,11 +2828,14 @@ void rtk_parse_l2cap_data(uint8_t *pp, uint8_t direction)
     uint16_t handle, total_len, pdu_len, channel_ID, command_len, psm, scid, dcid, result, status;
     uint8_t flag, code, identifier;
     STREAM_TO_UINT16 (handle, pp);
-    flag = handle >> 12;
+    flag = (handle >> HCI_DATA_EVENT_OFFSET) & HCI_DATA_EVENT_MASK;
     handle = handle & 0x0FFF;
     STREAM_TO_UINT16 (total_len, pp);
     STREAM_TO_UINT16 (pdu_len, pp);
     STREAM_TO_UINT16 (channel_ID, pp);
+
+    if(flag != RTK_START_PACKET_BOUNDARY)
+      return;
 
     if(channel_ID == 0x0001)
     {
@@ -2943,7 +2957,7 @@ void rtk_set_bt_on(uint8_t bt_on) {
     RtkLogMsg("bt stack is init");
     rtk_prof.bt_on = bt_on;
     uint8_t ttmp[1] = {1};
-    rtk_vendor_cmd_to_fw(0xfc1b, 1, ttmp);
+    rtk_vendor_cmd_to_fw(0xfc1b, 1, ttmp, NULL);
 }
 
 static rtk_parse_manager_t parse_interface = {

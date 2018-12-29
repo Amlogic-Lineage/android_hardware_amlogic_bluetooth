@@ -165,6 +165,7 @@ int mp_drv_mode = 0; /* 1 Mptool Fw; 0 Normal Fw */
 #define ROM_LMP_8723b               0x8723
 #define ROM_LMP_8821a               0X8821
 #define ROM_LMP_8761a               0X8761
+#define ROM_LMP_8761b               0X8761
 #define ROM_LMP_8703a               0x8723
 #define ROM_LMP_8763a               0x8763
 #define ROM_LMP_8703b               0x8703
@@ -193,7 +194,8 @@ uint16_t project_id[] = {
     ROM_LMP_8821c,
     ROM_LMP_NONE,
     ROM_LMP_NONE,
-    ROM_LMP_8822c, //0x0d
+    ROM_LMP_8822c,  //0x0d
+    ROM_LMP_8761b,
     ROM_LMP_NONE
 };
 struct rtk_eversion_evt {
@@ -596,7 +598,6 @@ static inline void hci_set_drvdata(struct hci_dev *hdev, void *data)
 #define CONFIG_MAC_OFFSET_GEN_1_2       (0x3C)      //MAC's OFFSET in config/efuse for realtek generation 1~2 bluetooth chip
 #define CONFIG_MAC_OFFSET_GEN_3PLUS     (0x44)      //MAC's OFFSET in config/efuse for rtk generation 3+ bluetooth chip
 #define CONFIG_MAC_OFFSET_GEN_4PLUS     (0x30)      //MAC's OFFSET in config/efuse for rtk generation 4+ bluetooth chip
-
 
 /*******************************
 **    Reasil patch code
