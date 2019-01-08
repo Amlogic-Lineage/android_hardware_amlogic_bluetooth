@@ -20,6 +20,7 @@
 #include <net/bluetooth/bluetooth.h>
 
 #define SAVE_FW_DUMP_IN_KERNEL	1
+#define DBUG_FW_DUMP_READ_CR	0
 
 #define SUPPORT_FW_DUMP		1
 #define BTM_HEADER_LEN                  5
@@ -65,6 +66,7 @@ struct btmtk_thread {
 	struct task_struct *task;
 	wait_queue_head_t wait_q;
 	void *priv;
+	u8 thread_status;
 };
 
 struct btmtk_device {
@@ -126,6 +128,7 @@ struct btmtk_private {
 	struct task_struct *fw_dump_tsk;
 	struct task_struct *fw_dump_end_check_tsk;
 #endif
+	bool no_fw_own;
 };
 
 #define MTK_VENDOR_PKT                 0xFE

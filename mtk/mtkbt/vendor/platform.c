@@ -236,6 +236,7 @@ int dev_node_operations(int on)
     ALOGD("%s: power %s %s(%s)!\n", __FUNCTION__, BT_POWER_ON == on? "up":"down", ret == 0? "done":"failed", strerror(errno));
     CLEAR_ERROR_INFO;
     return ret;
+
 }
 
 int set_sdio_power(int on)
@@ -289,6 +290,7 @@ int load_mtkbt()
 
 void mtkbt_unload()
 {
+return;  //for android p
     property_set(DRIVER_PROP_NAME,"false");
     sleep(2);
     set_sdio_power(0);

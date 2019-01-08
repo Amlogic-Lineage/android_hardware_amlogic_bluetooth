@@ -51,6 +51,7 @@ FallthroughBTA::FallthroughBTA() {
   // No factory BDADDR found. Look for a previously stored BDA.
   if (property_get(PERSIST_BDADDR_PROPERTY, property, NULL) &&
       string_to_bytes(property, local_addr)) {
+		ALOGE("%s: No factory BDADDR found", __func__);  
         // valid, donot setup the fallback properties!
         return;
   }

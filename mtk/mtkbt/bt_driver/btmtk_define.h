@@ -74,7 +74,7 @@ extern u8 btmtk_log_lvl;
 			int raw_count = 0;					\
 			const unsigned char *ptr = p;				\
 			pr_info("[btmtk_info] "fmt, ##__VA_ARGS__);		\
-			for (raw_count = 0; raw_count <= l; ++raw_count) {	\
+			for (raw_count = 0; raw_count < l; ++raw_count) {	\
 				pr_info(" %02X", ptr[raw_count]);		\
 			}							\
 			pr_info("\n");						\
@@ -87,7 +87,7 @@ extern u8 btmtk_log_lvl;
 			int raw_count = 0;					\
 			const unsigned char *ptr = p;				\
 			pr_debug("[btmtk_info] "fmt, ##__VA_ARGS__);		\
-			for (raw_count = 0; raw_count <= l; ++raw_count) {	\
+			for (raw_count = 0; raw_count < l; ++raw_count) {	\
 				pr_debug(" %02X", ptr[raw_count]);		\
 			}							\
 			pr_debug("\n");						\

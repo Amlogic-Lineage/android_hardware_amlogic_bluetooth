@@ -103,7 +103,10 @@ static char event_need_compare_len;
 static char event_compare_status;
 /*add special header in the beginning of even, stack won't recognize these event*/
 
-
+#if DBUG_FW_DUMP_READ_CR 
+//struct timer_list debug_dump_t;
+//char debug_dump_data[] = {"dcftir\n"};
+#endif
 
 
 int fw_dump_buffer_full;
@@ -501,7 +504,7 @@ static int btmtk_sdio_load_woble_setting(u8 *image, char *bin_name,
 		goto LOAD_END;
 
 	err = btmtk_sdio_load_woble_block_setting("APCF_COMPLETE_EVENT",
-			data->woble_setting_apcf_resume, WOBLE_SETTING_COUNT, image);
+			data->woble_setting_apcf_resume_event, WOBLE_SETTING_COUNT, image);
 
 LOAD_END:
 	if (err)
@@ -566,7 +569,11 @@ static int btmtk_sdio_writel(u32 offset, u32 val)
 	return ret;
 }
 
+#if DBUG_FW_DUMP_READ_CR
+int btmtk_sdio_readl(u32 offset,  u32 *val)
+#else
 static int btmtk_sdio_readl(u32 offset,  u32 *val)
+#endif
 {
 	u32 ret = 0;
 
@@ -614,6 +621,14 @@ struct sk_buff *btmtk_create_send_data(struct sk_buff *skb)
 	return queue_skb;
 }
 
+static void btmtk_sdio_set_no_fw_own(struct btmtk_private *priv, bool no_fw_own)
+{
+	if (priv) {
+		priv->no_fw_own = no_fw_own;
+		pr_warn("%s set no_fw_own %d\n", __func__, priv->no_fw_own);
+	} else
+		pr_warn("%s priv is NULL\n", __func__);
+}
 static int btmtk_sdio_set_own_back(int owntype)
 {
 	/*Set driver own*/
@@ -627,6 +642,14 @@ static int btmtk_sdio_set_own_back(int owntype)
 
 	if (user_rmmod)
 		set_checkretry = 1;
+	if (owntype == FW_OWN && (g_priv)) {
+		if (g_priv->no_fw_own) {
+			printk_ratelimited(KERN_WARNING
+				"%s no_fw_own is on, just return\n", __func__);
+
+			return ret;
+		}
+	}
 
 	ret = btmtk_sdio_readl(CHLPCR, &u32ReadCRValue);
 
@@ -1022,6 +1045,51 @@ static u32 btmtk_sdio_bt_memRegister_read(u32 cr)
 	return result;
 }
 
+static int btmtk_sdio_util_recv_event(u8 *wmt_event, int header_size)
+{
+    int retrytime = 40;
+    int ret = 0;
+	u32 u32ReadCRValue = 0;
+    
+    do {
+        msleep(100);
+        retrytime--;
+        btmtk_sdio_recv_rx_data();
+        if (!rxbuf[0]) {
+            if (retrytime < 10) {
+                pr_warn("%s: retry over 3s, rxbuf is NULL, retrytime %d\n", __func__, retrytime);
+                btmtk_sdio_readl(SWPCDBGR, &u32ReadCRValue);
+                pr_info("%s aa SWPCDBGR 0x%x\n", __func__, u32ReadCRValue);
+            }
+            continue;
+        }
+        else {
+            if (memcmp(wmt_event, rxbuf+header_size, strlen(wmt_event)) == 0) {
+                pr_warn("%s: recv event ok.\n", __func__);
+                break;
+            }
+            else {
+                pr_info("%s: rxbuf not null, buf event is wrong.\n", __func__);
+                if (retrytime < 5) {
+                    pr_info("%s: retrytime < 5, retrytime = %d\n", __func__, retrytime);
+                    btmtk_sdio_readl(SWPCDBGR, &u32ReadCRValue);
+                    pr_info("%s bb SWPCDBGR 0x%x\n", __func__, u32ReadCRValue);
+                    btmtk_sdio_readl(SWPCDBGR, &u32ReadCRValue);
+                    pr_info("%s cc SWPCDBGR 0x%x\n", __func__, u32ReadCRValue);
+                }
+                continue;
+            }
+        }
+    }while(retrytime > 0);
+
+    if (retrytime == 0) {
+        ret = -EIO;
+        pr_err("%s, time over 4s, Oops!!!\n", __func__);
+    }
+
+    return ret;
+}
+
 /* 1:on ,  0:off */
 static int btmtk_sdio_bt_set_power(u8 onoff)
 {
@@ -1047,27 +1115,7 @@ static int btmtk_sdio_bt_set_power(u8 onoff)
 	btmtk_sdio_send_tx_data(txbuf,
 		MTK_SDIO_PACKET_HEADER_SIZE+sizeof(mtksdio_wmt_cmd));
 
-	do {
-		msleep(100);
-		btmtk_sdio_recv_rx_data();
-		retrytime--;
-		if (retrytime <= 0)
-			break;
-
-		if (retrytime < 40)
-			pr_warn("%s: retry over 2s, retrytime %d\n",
-				__func__, retrytime);
-
-		pr_debug("%s: retrytime %d\n", __func__, retrytime);
-	} while (!rxbuf[0]);
-
-
-	/*compare rx data is wmt reset correct response or not*/
-	if (memcmp(wmt_event, rxbuf+MTK_SDIO_PACKET_HEADER_SIZE,
-			sizeof(wmt_event)) != 0) {
-		ret = -EIO;
-		pr_info("%s: fail\n", __func__);
-	}
+    ret = btmtk_sdio_util_recv_event(wmt_event, MTK_SDIO_PACKET_HEADER_SIZE);
 
 	return ret;
 }
@@ -1737,7 +1785,7 @@ static int btmtk_sdio_need_load_rom_patch(void)
 			if (memcmp(rxbuf+7, event, sizeof(event)) == 0)
 				return rxbuf[11];
 
-			pr_err("%s receive event content is not correct, print receive data\n",
+			pr_info("%s receive event content is not correct, print receive data\n",
 				__func__);
 			btmtk_print_buffer_conent(rxbuf, rx_length);
 		}
@@ -1774,8 +1822,7 @@ static int btmtk_sdio_set_i2s(void)
 {
 	int ret = 0;
 	u32 pinmux = 0;
-	return 0;
-#if 1  //mtksdio proble too long so remove btmtk_sdio_set_i2s 
+
 	ret = btmtk_sdio_set_i2s_slave();
 	if (ret) {
 		pr_err("btmtk_sdio_set_i2s_slave error(%d)\n", ret);
@@ -1805,7 +1852,6 @@ static int btmtk_sdio_set_i2s(void)
 	pr_info("confirm pinmux %04x\n", pinmux);
 
 	return ret;
-#endif
 }
 
 static int btmtk_sdio_download_rom_patch(
@@ -1836,7 +1882,7 @@ static int btmtk_sdio_download_rom_patch(
 
 	patch_status = btmtk_sdio_need_load_rom_patch();
 
-	pr_debug("%s patch_status %d\n", __func__, patch_status);
+	pr_info("%s patch_status %d\n", __func__, patch_status);
 
 	uhwversion = btmtk_sdio_bt_memRegister_read(HW_VERSION);
 	pr_info("%s uhwversion 0x%x\n", __func__, uhwversion);
@@ -2097,6 +2143,12 @@ static int btmtk_sdio_card_to_host(struct btmtk_private *priv, const u8 *event, 
 	char *core_dump_end = NULL;
 	int i = 0;
 	static int print_dump_data_counter;
+	if (rx_length > (MTK_SDIO_PACKET_HEADER_SIZE + 1))
+		buf_len = rx_length - (MTK_SDIO_PACKET_HEADER_SIZE + 1);
+	else {
+		pr_err("%s, rx_length error(%d)\n", __func__, rx_length);
+		return -EINVAL;
+	}
 
 #if SUPPORT_FW_DUMP
 	fw_is_coredump_end_packet = false;
@@ -2138,6 +2190,7 @@ static int btmtk_sdio_card_to_host(struct btmtk_private *priv, const u8 *event, 
 							fw_dump_file_name,
 							O_RDWR | O_CREAT,
 							0644);
+					btmtk_sdio_set_no_fw_own(g_priv, TRUE);
 					print_dump_data_counter = 0;
 					if (!(IS_ERR(fw_dump_file))) {
 						current_fwdump_file_number =
@@ -2209,6 +2262,11 @@ static int btmtk_sdio_card_to_host(struct btmtk_private *priv, const u8 *event, 
 
 #if SAVE_FW_DUMP_IN_KERNEL
 FW_DONE:
+
+#ifdef SWITCH_MODULE_H
+    platform_dongle_reset();
+#endif
+
 #endif
 
 	/*receive picus data to fwlog_queue*/
@@ -2370,6 +2428,11 @@ static int btmtk_sdio_process_int_status(
 	u32 u32ReadCRValue = 0;
 
 	ret = btmtk_sdio_readl(CHISR, &u32ReadCRValue);
+	pr_debug("%s CHISR 0x%08x\n", __func__, u32ReadCRValue);
+	if (u32ReadCRValue & FIRMWARE_INT_BIT15) {
+		btmtk_sdio_set_no_fw_own(g_priv, TRUE);
+		btmtk_sdio_writel(CHISR, FIRMWARE_INT_BIT15);
+	}
 	pr_debug("%s check TX_EMPTY CHISR 0x%08x\n", __func__, u32ReadCRValue);
 	if (TX_EMPTY&u32ReadCRValue) {
 		ret = btmtk_sdio_writel(CHISR, (TX_EMPTY | TX_COMPLETE_COUNT));
@@ -2947,10 +3010,11 @@ static void btmtk_sdio_remove(struct sdio_func *func)
 
 	pr_info("%s begin user_rmmod %d\n", __func__, user_rmmod);
 	probe_ready = false;
-
+	btmtk_sdio_set_no_fw_own(g_priv, FALSE);
 	if (func) {
 		card = sdio_get_drvdata(func);
-		if (card) {
+		if (card) {	
+#ifdef SWITCH_MODULE_A
 			/* Send SHUTDOWN command & disable interrupt
 			 * if user removes the module.
 			 */
@@ -2961,9 +3025,9 @@ static void btmtk_sdio_remove(struct sdio_func *func)
 				btmtk_sdio_enable_interrupt(0);
 				btmtk_sdio_bt_set_power(0);
 				btmtk_sdio_set_own_back(FW_OWN);
-
 				btmtk_sdio_disable_host_int(card);
 			}
+#endif
 			btmtk_sdio_woble_free_setting();
 			pr_debug("unregester dev\n");
 			card->priv->surprise_removed = true;
@@ -3423,9 +3487,11 @@ static int btmtk_sdio_send_apcf_reserved(void)
 
 static int btmtk_sdio_suspend(struct device *dev)
 {
+#ifdef SWITCH_MODULE_A
 	struct sdio_func *func = dev_to_sdio_func(dev);
-	u8 ret = 0;
 	mmc_pm_flag_t pm_flags;
+#endif
+	u8 ret = 0;
 
 	pr_info("%s begin\n", __func__);
 
@@ -3460,7 +3526,7 @@ static int btmtk_sdio_suspend(struct device *dev)
 		pr_info("%s:irq_enable count:%d\n", __func__, atomic_read(&(g_card->irq_enable_count)));
 #endif
 
-
+#ifdef SWITCH_MODULE_A
 	if (func) {
 		pm_flags = sdio_get_host_pm_caps(func);
 		pr_debug("%s: suspend: PM flags = 0x%x\n",
@@ -3474,12 +3540,15 @@ static int btmtk_sdio_suspend(struct device *dev)
 		pr_err("sdio_func is not specified\n");
 		return 0;
 	}
-
+#endif
 	ret = btmtk_sdio_set_own_back(FW_OWN);
 	if (ret)
 		pr_err("%s set fw own fail\n", __func__);
 
+#ifdef SWITCH_MODULE_A
 	return sdio_set_host_pm_flags(func, MMC_PM_KEEP_POWER);
+#endif
+    return 0;
 }
 
 static int btmtk_sdio_resume(struct device *dev)
@@ -3590,12 +3659,32 @@ static int btmtk_fops_open(struct inode *inode, struct file *file)
 		g_priv->adapter->fops_mode = true;
 
 	pr_info("%s fops_mode=%d end\n", __func__, g_priv->adapter->fops_mode);
+#if DBUG_FW_DUMP_READ_CR 
+//	init_timer(&debug_dump_t);
+
+//	debug_dump_t.function = debug_dump_function;
+//  	debug_dump_t.data = (unsigned long) debug_dump_data;
+//  	debug_dump_t.expires = jiffies + HZ;
+//  	add_timer(&debug_dump_t);
+#endif
 	return 0;
 }
+#if DBUG_FW_DUMP_READ_CR 
+//static void debug_dump_function(unsigned long data)
+//{
+//	u32 u32ReadCRValue = 0;
+
+	//btmtk_sdio_readl(SWPCDBGR, &u32ReadCRValue);
+//	pr_info("%s SWPCDBGR %x\n", __func__, u32ReadCRValue);
+	//debug_dump_t.expires = jiffies + HZ;
+	//debug_dump_t.function = debug_dump_function;
+//	add_timer(&debug_dump_t)
+//	return;
+//}
+#endif
 
 static int btmtk_fops_close(struct inode *inode, struct file *file)
 {
-       u8 ret = 0;
 	pr_info("%s begin\n", __func__);
 
 	if (!probe_ready) {
@@ -3606,25 +3695,13 @@ static int btmtk_fops_close(struct inode *inode, struct file *file)
 
 	if (g_priv)
 		g_priv->adapter->fops_mode = false;
-	
-	pr_debug("%s start to send DRIVER_OWN\n", __func__);
-	ret = btmtk_sdio_set_own_back(DRIVER_OWN);
-
-	if (ret)
-		pr_err("%s set driver own fail\n", __func__);
-
-	if (!is_support_unify_woble(g_card))
-		pr_warn("%s: no support", __func__);
-	else
-		btmtk_sdio_handle_entering_WoBLE_state();
-	
-	ret = btmtk_sdio_set_own_back(FW_OWN);
-	if (ret)
-		pr_err("%s set fw own fail\n", __func__);
 
 	btmtk_clean_queue();
 
 	pr_info("%s fops_mode=%d end\n", __func__, g_priv->adapter->fops_mode);
+#if DBUG_FW_DUMP_READ_CR 
+//	del_timer(&debug_dump_t);
+#endif
 	return 0;
 }
 
@@ -4039,6 +4116,21 @@ static ssize_t btmtk_fops_writefwlog(
 		pr_info("%s g_priv is NULL\n", __func__);
 		goto exit;
 	}
+	if (strstr(userbuf_fwlog, FW_OWN_OFF)) {
+		pr_warn("%s set FW_OWN_OFF\n", __func__);
+		btmtk_sdio_set_no_fw_own(g_priv, true);
+		length = count;
+		wake_up_interruptible(&g_priv->main_thread.wait_q);
+		goto exit;
+	}
+
+	if (strstr(userbuf_fwlog, FW_OWN_ON)) {
+		pr_warn("%s set FW_OWN_OFF\n", __func__);
+		btmtk_sdio_set_no_fw_own(g_priv, false);
+		length = count;
+		wake_up_interruptible(&g_priv->main_thread.wait_q);
+		goto exit;
+	}
 	if (count > HCI_MAX_COMMAND_BUF_SIZE) {
 		pr_err("%s: your command is larger than maximum length, count = %zd\n",
 			__func__, count);
@@ -4402,6 +4494,18 @@ static int BTMTK_init(void)
 
 static void BTMTK_exit(void)
 {
+#ifdef SWITCH_MODULE_H
+		if(probe_ready){
+			if(btmtk_sdio_set_own_back(DRIVER_OWN))
+				pr_err("%s set driver own fail\n", __func__);
+			else{
+				pr_info("%s send unify woble cmd before module_exit" , __func__);
+				btmtk_sdio_handle_entering_WoBLE_state();
+				btmtk_sdio_set_own_back(FW_OWN);
+			}
+		}
+#endif
+
 	dev_t dev = MKDEV(BTMTK_major, 0);
 	dev_t devIDfwlog = g_devIDfwlog;
 
@@ -4456,8 +4560,8 @@ static void BTMTK_exit(void)
 	cdev_del(&BTMTK_cdev);
 	pr_info("%s 10\n", __func__);
 	unregister_chrdev_region(dev, 1);
-	
 	cdev_del(&BT_cdevfwlog);
+	pr_info("%s 11\n", __func__);
 	unregister_chrdev_region(devIDfwlog, 1);
 	pr_info("%s driver removed.\n", BT_DRIVER_NAME);
 }
@@ -4504,7 +4608,15 @@ static int btmtk_sdio_free_memory(void)
 
 static int __init btmtk_sdio_init_module(void)
 {
-	BTMTK_init();
+	int ret = 0;
+#ifdef SWITCH_MODULE_H
+		platform_bt_power_on();
+#endif
+	ret = BTMTK_init();
+	if (ret) {
+		pr_err("%s: BTMTK_init failed!", __func__);
+		return ret;
+	}
 
 	if (btmtk_sdio_allocate_memory() < 0) {
 		pr_err("%s: allocate memory failed!", __func__);

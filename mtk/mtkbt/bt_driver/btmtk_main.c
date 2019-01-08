@@ -175,15 +175,47 @@ static int btmtk_service_main_thread(void *data)
 		}
 	}
 
+	/*Set stp_sdio_tx_rx thread priority from 120 to 101*/
+	set_user_nice(current, -19);
+
 	if (priv->adapter)
 		adapter = priv->adapter;
 	else {
 		pr_err("%s priv->adapter is NULL return\n", __func__);
 		return 0;
 	}
+	thread->thread_status = 1;
 
+#if DBUG_FW_DUMP_READ_CR
+	u32 u32ReadCRValue = 0;
+	struct timeval g_pre_time;
+	do_gettimeofday(&g_pre_time);
+#endif
 	init_waitqueue_entry(&wait, current);
 	for (;;) {
+	#if DBUG_FW_DUMP_READ_CR
+		struct timeval diff;
+		struct timeval temp;
+
+        do_gettimeofday(&diff);
+		temp.tv_sec = diff.tv_sec;
+		temp.tv_usec = diff.tv_usec;
+        if (diff.tv_usec < g_pre_time.tv_usec) {
+                diff.tv_sec -= 1;
+                diff.tv_usec += 1000000;
+        }
+
+        diff.tv_sec -= g_pre_time.tv_sec;
+        diff.tv_usec -= g_pre_time.tv_usec;
+
+		if ((diff.tv_sec*1000+diff.tv_usec/1000)>=1000)
+		{
+			g_pre_time.tv_sec = temp.tv_sec;
+			g_pre_time.tv_usec = temp.tv_usec;
+			btmtk_sdio_readl(SWPCDBGR, &u32ReadCRValue);
+			pr_info("%s SWPCDBGR %x\n", __func__, u32ReadCRValue);
+		}
+	#endif
 		add_wait_queue(&thread->wait_q, &wait);
 		set_current_state(TASK_INTERRUPTIBLE);
 		if (kthread_should_stop()) {
@@ -271,7 +303,8 @@ static int btmtk_service_main_thread(void *data)
 			}
 		}
 	}
-	pr_info("%s  end\n", __func__);
+	pr_warn("%s  end\n", __func__);
+	thread->thread_status = 0;
 	return 0;
 }
 
@@ -320,11 +353,14 @@ int btmtk_remove_card(struct btmtk_private *priv)
 {
 	pr_info("%s begin\n", __func__);
 
-	pr_info("%s stop main_thread\n", __func__);
+	pr_info("%s stop main_thread, thread_status=%d\n", __func__,priv->main_thread.thread_status);
 	if (IS_ERR(priv->main_thread.task)){
 		pr_err("priv->main_thread.task=%lx\n",PTR_ERR(priv->main_thread.task));
-	}else {	    
-        kthread_stop(priv->main_thread.task);
+	}
+	else if (priv->main_thread.thread_status)
+	{
+	  pr_info("%s kthread_stop\n", __func__);
+                kthread_stop(priv->main_thread.task);
     }
 	pr_info("%s stop main_thread done\n", __func__);
 #ifdef CONFIG_DEBUG_FS

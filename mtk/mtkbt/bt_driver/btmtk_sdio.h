@@ -14,12 +14,16 @@
 #ifndef _BTMTK_SDIO_H_
 #define _BTMTK_SDIO_H_
 #include "btmtk_config.h"
+#include "btmtk_drv.h"
 #if ((SUPPORT_UNIFY_WOBLE & SUPPORT_ANDROID) || SUPPORT_EINT)
 #include <linux/wakelock.h>
 #endif
 
+#ifndef SWITCH_MODULE_A
+#define SWITCH_MODULE_A
+#endif
 
-#define VERSION "v0.0.0.52_201803230A"
+#define VERSION "v0.0.0.52_2018070501_cstm0504"
 
 #define SDIO_HEADER_LEN                 4
 
@@ -36,6 +40,10 @@
 
 /* Number of blocks for firmware transfer */
 #define FIRMWARE_TRANSFER_NBLOCK        2
+//#define DBUG_FW_DUMP_READ_CR			1
+#if DBUG_FW_DUMP_READ_CR
+#define SWPCDBGR 					0x0154
+#endif
 
 /* This is for firmware specific length */
 #define FW_EXTRA_LEN                    36
@@ -224,6 +232,7 @@ struct _PATCH_HEADER {
 /*CHISR*/
 #define RX_PKT_LEN             0xFFFF0000
 #define FIRMWARE_INT             0x0000FE00
+#define FIRMWARE_INT_BIT15       0x00008000/*FW inform driver don't change to fw own for dore dump*/
 #define TX_FIFO_OVERFLOW         0x00000100
 #define FW_INT_IND_INDICATOR        0x00000080
 #define TX_COMPLETE_COUNT         0x00000070
@@ -290,6 +299,9 @@ struct sk_buff *btmtk_create_send_data(struct sk_buff *skb);
 int btmtk_print_buffer_conent(u8 *buf, u32 Datalen);
 u32 lock_unsleepable_lock(struct _OSAL_UNSLEEPABLE_LOCK_ *pUSL);
 u32 unlock_unsleepable_lock(struct _OSAL_UNSLEEPABLE_LOCK_ *pUSL);
+#if DBUG_FW_DUMP_READ_CR
+int btmtk_sdio_readl(u32 offset,  u32 *val);
+#endif
 
 extern unsigned char probe_counter;
 extern unsigned char *txbuf;
@@ -334,6 +346,14 @@ static inline int is_support_unify_woble(struct btmtk_sdio_card *data)
 	return 0;
 #endif
 }
+
+#define FW_OWN_OFF "fw own off"
+#define FW_OWN_ON  "fw own on"
+
+#ifdef SWITCH_MODULE_H
+extern void platform_bt_power_on(void);
+extern void platform_dongle_reset(void);
+#endif
 
 
 #endif
