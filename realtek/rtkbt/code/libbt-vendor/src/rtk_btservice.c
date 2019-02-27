@@ -25,7 +25,7 @@
  ******************************************************************************/
 
 #define LOG_TAG "bt_service"
-#define RTKBT_RELEASE_NAME	"Test"
+#define RTKBT_RELEASE_NAME "20190125_BT_ANDROID_9.0"
 
 #include <utils/Log.h>
 #include <sys/types.h>

@@ -20,7 +20,7 @@ LOCAL_SRC_FILES := \
         rtk_heartbeat.c \
         rtk_poll.c \
         rtk_btsnoop_net.c \
-        FallthroughBTA.cpp
+	FallthroughBTA.cpp
 
 LOCAL_C_INCLUDES += \
         $(LOCAL_PATH)/../include \
