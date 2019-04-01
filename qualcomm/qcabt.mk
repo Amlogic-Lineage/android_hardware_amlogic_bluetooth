@@ -16,5 +16,6 @@ PRODUCT_COPY_FILES += frameworks/native/data/etc/android.hardware.bluetooth.xml:
 
 PRODUCT_PROPERTY_OVERRIDES += poweroff.doubleclick=1
 PRODUCT_PROPERTY_OVERRIDES += qcom.bluetooth.soc=rome_uart
+PRODUCT_PROPERTY_OVERRIDES += wc_transport.soc_initialized=0
 
 PRODUCT_PACKAGES += libbt-vendor

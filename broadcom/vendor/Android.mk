@@ -50,7 +50,7 @@ include $(LOCAL_PATH)/vnd_buildcfg.mk
 
 include $(BUILD_SHARED_LIBRARY)
 
-ifeq ($(BCM_USB_BT), true)
+ifeq ($(BLUETOOTH_INF), USB)
     include $(LOCAL_PATH)/conf/bcm_usb_bt/Android.mk
 else
     include $(LOCAL_PATH)/conf/meson/Android.mk
