@@ -1,4 +1,4 @@
-# RELEASE NAME: 20190125_BT_ANDROID_9.0
+# RELEASE NAME: 20190311_BT_ANDROID_9.0
 # RTKBT_API_VERSION=2.1.1.0
 
 BOARD_HAVE_BLUETOOTH := true
@@ -20,6 +20,11 @@ PRODUCT_COPY_FILES += \
        $(LOCAL_PATH)/system/etc/permissions/android.hardware.bluetooth_le.xml:system/etc/permissions/android.hardware.bluetooth_le.xml \
        $(LOCAL_PATH)/system/etc/permissions/android.hardware.bluetooth.xml:system/etc/permissions/android.hardware.bluetooth.xml \
 
+ifeq ($(BOARD_HAVE_BLUETOOTH_RTK_TV), true)
+PRODUCT_COPY_FILES += \
+        $(LOCAL_PATH)/vendor/usr/keylayout/Vendor_005d_Product_0001.kl:vendor/usr/keylayout/Vendor_005d_Product_0001.kl \
+        $(LOCAL_PATH)/vendor/usr/keylayout/Vendor_005d_Product_0002.kl:vendor/usr/keylayout/Vendor_005d_Product_0002.kl
+endif
 
 # base bluetooth
 PRODUCT_PACKAGES += \

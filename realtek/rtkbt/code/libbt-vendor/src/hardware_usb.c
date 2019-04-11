@@ -1,5 +1,5 @@
 #define LOG_TAG "bt_hwcfg_usb"
-#define RTKBT_RELEASE_NAME "20190125_BT_ANDROID_9.0"
+#define RTKBT_RELEASE_NAME "20190311_BT_ANDROID_9.0"
 
 #include <utils/Log.h>
 #include <sys/types.h>
@@ -39,6 +39,9 @@ extern struct rtk_epatch_entry *rtk_get_patch_entry(bt_hw_cfg_cb_t *cfg_cb);
 extern int rtk_get_bt_firmware(uint8_t** fw_buf, char* fw_short_name);
 extern uint8_t rtk_get_fw_project_id(uint8_t *p_buf);
 
+#define EXTRA_CONFIG_FILE "/vendor/etc/bluetooth/rtk_btconfig.txt"
+static struct rtk_bt_vendor_config_entry *extra_extry;
+static struct rtk_bt_vendor_config_entry *extra_entry_inx = NULL;
 
 /******************************************************************************
 **  Static variables
@@ -151,6 +154,117 @@ static const uint8_t RTK_EPATCH_SIGNATURE[8]={0x52,0x65,0x61,0x6C,0x74,0x65,0x63
 //Extension Section IGNATURE:0x77FD0451
 static const uint8_t EXTENSION_SECTION_SIGNATURE[4]={0x51,0x04,0xFD,0x77};
 
+static void usb_line_process(char *buf, unsigned short *offset, int *t)
+{
+    char *head = buf;
+    char *ptr = buf;
+    char *argv[32];
+    int argc = 0;
+    unsigned char len = 0;
+    int i = 0;
+    static int alt_size = 0;
+
+    if(buf[0] == '\0' || buf[0] == '#' || buf[0] == '[')
+        return;
+    if(alt_size > MAX_ALT_CONFIG_SIZE-4)
+    {
+        ALOGW("Extra Config file is too large");
+        return;
+    }
+    if(extra_entry_inx == NULL)
+        extra_entry_inx = extra_extry;
+    ALOGI("line_process:%s", buf);
+    while((ptr = strsep(&head, ", \t")) != NULL)
+    {
+        if(!ptr[0])
+            continue;
+        argv[argc++] = ptr;
+        if(argc >= 32) {
+            ALOGW("Config item is too long");
+            break;
+        }
+    }
+
+    if(argc <4) {
+        ALOGE("Invalid Config item, ignore");
+        return;
+    }
+
+    offset[(*t)] = (unsigned short)((strtoul(argv[0], NULL, 16)) | (strtoul(argv[1], NULL, 16) << 8));
+    ALOGI("Extra Config offset %04x", offset[(*t)]);
+    extra_entry_inx->offset = offset[(*t)];
+    (*t)++;
+    len = (unsigned char)strtoul(argv[2], NULL, 16);
+    if(len != (unsigned char)(argc - 3)) {
+        ALOGE("Extra Config item len %d is not match, we assume the actual len is %d", len, (argc-3));
+        len = argc -3;
+    }
+    extra_entry_inx->entry_len = len;
+
+    alt_size += len + sizeof(struct rtk_bt_vendor_config_entry);
+    if(alt_size > MAX_ALT_CONFIG_SIZE)
+    {
+        ALOGW("Extra Config file is too large");
+        extra_entry_inx->offset = 0;
+        extra_entry_inx->entry_len = 0;
+        alt_size -= (len + sizeof(struct rtk_bt_vendor_config_entry));
+        return;
+    }
+    for(i = 0; i < len; i++)
+    {
+        extra_entry_inx->entry_data[i] = (uint8_t)strtoul(argv[3+i], NULL, 16);
+        ALOGI("data[%d]:%02x", i, extra_entry_inx->entry_data[i]);
+    }
+    extra_entry_inx = (struct rtk_bt_vendor_config_entry *)((uint8_t *)extra_entry_inx + len + sizeof(struct rtk_bt_vendor_config_entry));
+}
+
+static void usb_parse_extra_config(const char *path, usb_patch_info *patch_entry, unsigned short *offset, int *t)
+{
+    int fd, ret;
+    unsigned char buf[1024];
+
+    fd = open(path, O_RDONLY);
+    if(fd == -1) {
+        ALOGI("Couldn't open extra config %s, err:%s", path, strerror(errno));
+        return;
+    }
+
+    ret = read(fd, buf, sizeof(buf));
+    if(ret == -1) {
+        ALOGE("Couldn't read %s, err:%s", path, strerror(errno));
+        close(fd);
+        return;
+    }
+    else if(ret == 0) {
+        ALOGE("%s is empty", path);
+        close(fd);
+        return;
+    }
+
+    if(ret > 1022) {
+        ALOGE("Extra config file is too big");
+        close(fd);
+        return;
+    }
+    buf[ret++] = '\n';
+    buf[ret++] = '\0';
+    close(fd);
+    char *head = (void *)buf;
+    char *ptr = (void *)buf;
+    ptr = strsep(&head, "\n\r");
+    if(strncmp(ptr, patch_entry->config_name, strlen(ptr)))
+    {
+        ALOGW("Extra config file not set for %s, ignore", patch_entry->config_name);
+        return;
+    }
+    while((ptr = strsep(&head, "\n\r")) != NULL)
+    {
+        if(!ptr[0])
+            continue;
+        usb_line_process(ptr, offset, t);
+    }
+}
+
 static inline int getUsbAltSettings(usb_patch_info *patch_entry, unsigned short *offset)//(patch_info *patch_entry, unsigned short *offset, int max_group_cnt)
 {
     int n = 0;
@@ -161,6 +275,9 @@ static inline int getUsbAltSettings(usb_patch_info *patch_entry, unsigned short 
 
     offset[n++] = 0x15B;
 */
+    if(extra_extry)
+        usb_parse_extra_config(EXTRA_CONFIG_FILE, patch_entry, offset, &n);
+
     return n;
 }
 
@@ -168,9 +285,28 @@ static inline int getUsbAltSettingVal(usb_patch_info *patch_entry, unsigned shor
 {
     int res = 0;
 
-    switch(offset)
+    int i = 0;
+    struct rtk_bt_vendor_config_entry *ptr = extra_extry;
+
+    while(ptr->offset)
     {
-/*
+        if(ptr->offset == offset)
+        {
+            if(offset != patch_entry->mac_offset)
+            {
+                memcpy(val, ptr->entry_data, ptr->entry_len);
+                res = ptr->entry_len;
+                ALOGI("Get Extra offset:%04x, val:", offset);
+                for(i = 0; i < ptr->entry_len; i++)
+                    ALOGI("%02x", ptr->entry_data[i]);
+            }
+            break;
+        }
+        ptr = (struct rtk_bt_vendor_config_entry *)((uint8_t *)ptr + ptr->entry_len + sizeof(struct rtk_bt_vendor_config_entry));
+    }
+
+/*    switch(offset)
+    {
 //sample code, add special settings
         case 0x15B:
             val[0] = 0x0B;
@@ -179,11 +315,12 @@ static inline int getUsbAltSettingVal(usb_patch_info *patch_entry, unsigned shor
             val[3] = 0x0B;
             res = 4;
             break;
-*/
+
         default:
             res = 0;
             break;
     }
+*/
     if((patch_entry)&&(offset == patch_entry->mac_offset)&&(res == 0))
     {
         if(getmacaddr(val) == 0){
@@ -204,6 +341,13 @@ static void rtk_usb_update_altsettings(usb_patch_info *patch_entry, unsigned cha
     size_t config_len = *config_len_ptr;
     unsigned int  i = 0;
     int count = 0,temp = 0, j;
+
+    if((extra_extry = (struct rtk_bt_vendor_config_entry *)malloc(MAX_ALT_CONFIG_SIZE)) == NULL)
+    {
+        ALOGE("malloc buffer for extra_extry failed");
+    }
+    else
+        memset(extra_extry, 0, MAX_ALT_CONFIG_SIZE);
 
     ALOGI("ORG Config len=%08zx:\n", config_len);
     for(i = 0; i <= config_len; i+= 0x10)
@@ -235,8 +379,23 @@ static void rtk_usb_update_altsettings(usb_patch_info *patch_entry, unsigned cha
     {
         for(j = 0; j < count;j++)
         {
-            if(le16_to_cpu(entry->offset) == offset[j])
-                offset[j] = 0;
+            if(le16_to_cpu(entry->offset) == offset[j]) {
+                if(offset[j] == patch_entry->mac_offset)
+                    offset[j] = 0;
+                else
+                {
+                    struct rtk_bt_vendor_config_entry *t = extra_extry;
+                    while(t->offset) {
+                        if(t->offset == le16_to_cpu(entry->offset))
+                        {
+                            if(t->entry_len == entry->entry_len)
+                                offset[j] = 0;
+                            break;
+                        }
+                        t = (struct rtk_bt_vendor_config_entry *)((uint8_t *)t + t->entry_len + sizeof(struct rtk_bt_vendor_config_entry));
+                    }
+                }
+            }
         }
         if(getUsbAltSettingVal(patch_entry, le16_to_cpu(entry->offset), val) == entry->entry_len){
             ALOGI("rtk_update_altsettings: replace %04x[%02x]", le16_to_cpu(entry->offset), entry->entry_len);
@@ -262,6 +421,13 @@ static void rtk_usb_update_altsettings(usb_patch_info *patch_entry, unsigned cha
     }
     config->data_len = cpu_to_le16(i);
     *config_len_ptr = i + sizeof(struct rtk_bt_vendor_config);
+
+    if(extra_extry)
+    {
+        free(extra_extry);
+        extra_extry = NULL;
+        extra_entry_inx = NULL;
+    }
 
     ALOGI("NEW Config len=%08zx:\n", *config_len_ptr);
     for(i = 0; i<= (*config_len_ptr); i+= 0x10)

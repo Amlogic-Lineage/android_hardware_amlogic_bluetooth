@@ -39,7 +39,7 @@
 
 #include "rtk_btusb.h"
 
-#define RTKBT_RELEASE_NAME "20181224_BT_ANDROID_9.0"
+#define RTKBT_RELEASE_NAME "20190311_BT_ANDROID_9.0"
 #define VERSION "5.0.1"
 
 #define SUSPNED_DW_FW 0

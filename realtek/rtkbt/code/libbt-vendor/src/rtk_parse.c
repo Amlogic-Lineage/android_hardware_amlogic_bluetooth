@@ -1,6 +1,6 @@
 /******************************************************************************
  *
- *  Copyright (C) 2016 Realtek Corporation.
+ *  Copyright (C) 2009-2018 Realtek Corporation.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -34,7 +34,7 @@
 *
 ******************************************************************************/
 #define LOG_TAG "rtk_parse"
-#define RTKBT_RELEASE_NAME "20190125_BT_ANDROID_9.0"
+#define RTKBT_RELEASE_NAME "20190311_BT_ANDROID_9.0"
 
 #include <utils/Log.h>
 #include <stdlib.h>
