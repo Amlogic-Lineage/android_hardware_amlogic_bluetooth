@@ -58,7 +58,7 @@
 ******************************************************************************/
 
 #ifndef BTHW_DBG
-#define BTHW_DBG FALSE
+#define BTHW_DBG TRUE
 #endif
 
 #if (BTHW_DBG == TRUE)
@@ -125,7 +125,8 @@ enum {
     HW_CFG_DL_MINIDRIVER,
     HW_CFG_DL_FW_PATCH,
     HW_CFG_SET_UART_BAUD_2,
-    HW_CFG_SET_BD_ADDR
+    HW_CFG_SET_BD_ADDR,
+    HW_CFG_SET_SCO
 #if (USE_CONTROLLER_BDADDR == TRUE)
     , HW_CFG_READ_BD_ADDR
 #endif
@@ -170,7 +171,7 @@ typedef struct {
 
 void hw_config_cback(void *p_evt_buf);
 extern uint8_t vnd_local_bd_addr[BD_ADDR_LEN];
-
+void hw_sco_config(void);
 
 /******************************************************************************
 **  Static variables
@@ -829,8 +830,13 @@ void hw_config_cback(void *p_mem)
                 if ((is_proceeding = hw_config_set_bdaddr(p_buf)) == TRUE)
                     break;
 #endif
+            break;
                 /* fall through intentionally */
             case HW_CFG_SET_BD_ADDR:
+                hw_sco_config();
+                is_proceeding = TRUE;
+            break;
+            case HW_CFG_SET_SCO:
                 ALOGI("vendor lib fwcfg completed");
                 bt_vendor_cbacks->dealloc(p_buf);
                 bt_vendor_cbacks->fwcfg_cb(BT_VND_OP_RESULT_SUCCESS);
@@ -865,18 +871,8 @@ void hw_config_cback(void *p_mem)
                         *(p_tmp+2), *(p_tmp+1), *p_tmp);
                 }
 
-                ALOGI("vendor lib fwcfg completed");
-                bt_vendor_cbacks->dealloc(p_buf);
-                bt_vendor_cbacks->fwcfg_cb(BT_VND_OP_RESULT_SUCCESS);
 
-                hw_cfg_cb.state = 0;
-
-                if (hw_cfg_cb.fw_fd != -1)
-                {
-                    close(hw_cfg_cb.fw_fd);
-                    hw_cfg_cb.fw_fd = -1;
-                }
-
+                hw_sco_config();
                 is_proceeding = TRUE;
                 break;
 #endif // (USE_CONTROLLER_BDADDR == TRUE)
@@ -1036,7 +1032,7 @@ static void hw_sco_i2spcm_cfg_cback(void *p_mem)
                         bt_pcm_data_fmt_param[4]);
 
                 if ((ret = bt_vendor_cbacks->xmit_cb(HCI_VSC_WRITE_PCM_DATA_FORMAT_PARAM,
-                        p_buf, hw_sco_i2spcm_cfg_cback)) == FALSE)
+                        p_buf, hw_config_cback)) == FALSE)
                 {
                     bt_vendor_cbacks->dealloc(p_buf);
                 }
@@ -1371,6 +1367,8 @@ static void hw_sco_i2spcm_config(void *p_mem, uint16_t codec)
             ALOGI("I2SPCM config {0x%x, 0x%x, 0x%x, 0x%x}",
                     bt_sco_i2spcm_param[0], bt_sco_i2spcm_param[1],
                     bt_sco_i2spcm_param[2], bt_sco_i2spcm_param[3]);
+
+            hw_cfg_cb.state = HW_CFG_SET_SCO;
 
             if ((ret = bt_vendor_cbacks->xmit_cb(cmd_u16, p_buf, hw_sco_i2spcm_cfg_cback)) == FALSE)
             {

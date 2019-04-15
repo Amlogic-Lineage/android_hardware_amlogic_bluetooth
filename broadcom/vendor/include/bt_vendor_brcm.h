@@ -333,12 +333,12 @@
     4 : 2048K
 */
 #ifndef SCO_PCM_IF_CLOCK_RATE
-#define SCO_PCM_IF_CLOCK_RATE           4
+#define SCO_PCM_IF_CLOCK_RATE           0
 #endif
 
 /* SCO_PCM_IF_FRAME_TYPE - 0=Short, 1=Long */
 #ifndef SCO_PCM_IF_FRAME_TYPE
-#define SCO_PCM_IF_FRAME_TYPE           1
+#define SCO_PCM_IF_FRAME_TYPE           0
 #endif
 
 /* SCO_PCM_IF_SYNC_MODE
