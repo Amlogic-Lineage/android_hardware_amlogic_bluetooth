@@ -121,7 +121,7 @@ $(call inherit-product, hardware/amlogic/bluetooth/mtk/mtkbt/mtkbt.mk )
 ifeq ($(BLUETOOTH_INF), USB)
 $(shell sed -i "1a\    insmod \/vendor\/lib/modules\/btmtk_usb.ko" hardware/amlogic/bluetooth/configs/init_rc/init.amlogic.bluetooth.rc)
 else
-$(shell sed -i "1a\    insmod \/vendor\/lib/modules\/btmtk_sdio.ko" hardware/amlogic/bluetooth/configs/init_rc/init.amlogic.bluetooth.rc)
+$(shell sed -i "1a\    insmod \/vendor\/lib/modules\/btmtksdio.ko" hardware/amlogic/bluetooth/configs/init_rc/init.amlogic.bluetooth.rc)
 endif
 
 BOARD_HAVE_BLUETOOTH_MTK := true
