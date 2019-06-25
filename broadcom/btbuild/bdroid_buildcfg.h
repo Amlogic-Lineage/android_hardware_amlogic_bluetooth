@@ -21,7 +21,6 @@
 
 #define BTA_DM_COD {0x20, BTM_COD_MAJOR_AUDIO, BTM_COD_MINOR_SET_TOP_BOX}
 
-#define BTA_AV_SINK_INCLUDED FALSE
 
 // Turn off BLE_PRIVACY_SPT.  Remote reconnect fails on
 // often if this is enabled.
