@@ -14,7 +14,11 @@ PRODUCT_COPY_FILES += hardware/amlogic/wifi/bcm_ampak/config/4356/bcm4356a2.hcd:
 PRODUCT_COPY_FILES += hardware/amlogic/wifi/bcm_ampak/config/6255/BT/BCM4345C0.hcd:$(TARGET_COPY_OUT_VENDOR)/etc/bluetooth/BCM4345C0.hcd
 PRODUCT_COPY_FILES += hardware/amlogic/wifi/bcm_ampak/config/AP6269/BT/bcm43569a2.hcd:$(TARGET_COPY_OUT_VENDOR)/etc/bluetooth/bcm43569a2.hcd
 PRODUCT_COPY_FILES += hardware/amlogic/wifi/bcm_ampak/config/AP6271S/BT/BCM43751.hcd:$(TARGET_COPY_OUT_VENDOR)/etc/bluetooth/BCM43751.hcd
-PRODUCT_COPY_FILES += hardware/amlogic/wifi/bcm_ampak/config/AP6398/BT/BCM4359C0.hcd:$(TARGET_COPY_OUT_VENDOR)/etc/bluetooth/BCM4359C0.hcd
+ifeq ($(U212_CHIP), false)
+PRODUCT_COPY_FILES += hardware/amlogic/wifi/bcm_ampak/config/AP6398/BT/R3/BCM4359C0.hcd:$(TARGET_COPY_OUT_VENDOR)/etc/bluetooth/BCM4359C0.hcd
+else
+PRODUCT_COPY_FILES += hardware/amlogic/wifi/bcm_ampak/config/AP6398/BT/R2/BCM4359C0.hcd:$(TARGET_COPY_OUT_VENDOR)/etc/bluetooth/BCM4359C0.hcd
+endif
 PRODUCT_COPY_FILES += hardware/amlogic/wifi/bcm_ampak/config/AP62x8/bcm43569a2.hcd:$(TARGET_COPY_OUT_VENDOR)/etc/bluetooth/bcm43569a2.hcd
 PRODUCT_COPY_FILES += hardware/amlogic/wifi/bcm_ampak/config/AP6256/BT/BCM4345C5.hcd:$(TARGET_COPY_OUT_VENDOR)/etc/bluetooth/BCM4345C5.hcd
 PRODUCT_COPY_FILES += hardware/amlogic/wifi/bcm_ampak/config/AP6236/BT/BCM4343B0.hcd:$(TARGET_COPY_OUT_VENDOR)/etc/bluetooth/BCM43430B0.hcd
