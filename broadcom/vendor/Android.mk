@@ -13,8 +13,7 @@ LOCAL_SRC_FILES := \
         src/upio.c \
         src/conf.c \
         src/FallthroughBTA.cpp \
-        src/sysbridge.cpp \
-        src/wole/utility.c
+        src/sysbridge.cpp
 
 LOCAL_C_INCLUDES += \
         $(LOCAL_PATH)/include \
