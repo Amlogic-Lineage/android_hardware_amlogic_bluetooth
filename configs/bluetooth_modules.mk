@@ -14,6 +14,10 @@ ifeq ($(BLUETOOTH_MODULE), MTKBT)
 	BOARD_VENDOR_KERNEL_MODULES += $(PRODUCT_OUT)/obj/lib_vendor/btmtk_usb.ko
 endif
 
+ifeq ($(BLUETOOTH_MODULE), QCABT)
+	BOARD_VENDOR_KERNEL_MODULES += $(PRODUCT_OUT)/obj/lib_vendor/bt_usb_qcom.ko
+endif
+
 ####################################################################OTHER INF KO
 else
 

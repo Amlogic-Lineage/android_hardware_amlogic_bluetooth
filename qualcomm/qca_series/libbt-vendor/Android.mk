@@ -20,6 +20,7 @@ include $(CLEAR_VARS)
 
 BDROID_DIR := $(TOP_DIR)system/bt
 $(info hello qca test)
+ifneq ($(BLUETOOTH_INF), USB)
 LOCAL_SRC_FILES := \
         src/bt_vendor_qcom.c \
         src/hardware.c \
@@ -29,6 +30,12 @@ LOCAL_SRC_FILES := \
         src/hw_ar3k.c \
         src/bt_vendor_persist.cpp \
 		src/FallthroughBTA.cpp
+else
+$(info "USE QCOM Bluetooth vendor lib")
+LOCAL_SRC_FILES := \
+		src/bt_vendor_csr.c \
+		src/FallthroughBTA.cpp
+endif
 
 ifeq ($(QCOM_BT_USE_SIBS),true)
 LOCAL_CFLAGS += -DQCOM_BT_SIBS_ENABLE

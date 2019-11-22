@@ -63,6 +63,17 @@ endif
 $(shell cp hardware/amlogic/bluetooth/configs/init_rc/init.amlogic.bluetooth.rc.template hardware/amlogic/bluetooth/configs/init_rc/init.amlogic.bluetooth.rc)
 PRODUCT_COPY_FILES += hardware/amlogic/bluetooth/configs/init_rc/init.amlogic.bluetooth.rc:$(TARGET_COPY_OUT_VENDOR)/etc/init/hw/init.amlogic.bluetooth.rc
 
+#########################################################################
+#
+#                            SEI BT Remote Control
+#
+#########################################################################
+PRODUCT_COPY_FILES += \
+    $(call find-copy-subdir-files,*,hardware/amlogic/bluetooth/configs/hbg_rcu,vendor/etc) \
+    hardware/amlogic/bluetooth/configs/init_rc/init.hbg.remote.rc:/vendor/etc/init/init.hbg.remote.rc
+
+#########################################################################
+
 ################################################################################## RTKBT
 ifeq ($(BLUETOOTH_MODULE),RTKBT)
 #ifneq ($(filter rtl8761 rtl8723bs rtl8723bu rtl8821 rtl8822bu rtl8822bs, $(BLUETOOTH_MODULE)),)
@@ -87,6 +98,10 @@ endif
 ################################################################################## qcabt
 ifeq ($(BLUETOOTH_MODULE),QCABT)
 BOARD_HAVE_BLUETOOTH_QCOM := true
+
+ifeq ($(BLUETOOTH_INF), USB)
+$(shell sed -i "1a\    insmod \/vendor\/lib/modules\/bt_usb_qcom.ko" hardware/amlogic/bluetooth/configs/init_rc/init.amlogic.bluetooth.rc)
+endif
 
 #qca add start
 $(call inherit-product, hardware/amlogic/bluetooth/qualcomm/qcabt.mk )

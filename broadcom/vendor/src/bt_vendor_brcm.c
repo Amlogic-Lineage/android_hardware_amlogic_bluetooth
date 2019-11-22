@@ -32,6 +32,8 @@
 #include "bt_vendor_brcm.h"
 #include "upio.h"
 #include "userial_vendor.h"
+#include <pthread.h>
+#include "wole/utility.h"
 
 #ifndef BTVND_DBG
 #define BTVND_DBG FALSE
@@ -79,6 +81,11 @@ static const tUSERIAL_CFG userial_init_cfg =
     (USERIAL_DATABITS_8 | USERIAL_PARITY_NONE | USERIAL_STOPBITS_1),
     USERIAL_BAUD_115200
 };
+
+static pthread_t p_wole_vsc;
+extern pthread_mutex_t s_vsclock;
+extern pthread_cond_t s_vsccond;
+extern int wake_signal_sent;
 
 /******************************************************************************
 **  Functions
@@ -167,6 +174,11 @@ static int op(bt_vendor_opcode_t opcode, void *param)
             {
                 int (*fd_array)[] = (int (*)[]) param;
                 int fd, idx;
+
+                //retval = pthread_create(&p_wole_vsc,NULL, wole_vsc_write_thread,NULL);
+                //if (0 != retval)
+                //    ALOGE(" vsc write thread create failed");
+
                 fd = userial_vendor_open((tUSERIAL_CFG *) &userial_init_cfg);
                 if (fd != -1)
                 {
@@ -181,6 +193,9 @@ static int op(bt_vendor_opcode_t opcode, void *param)
 
         case BT_VND_OP_USERIAL_CLOSE:
             {
+                if ( (retval= pthread_kill(p_wole_vsc, SIGUSR1)) != 0)
+                    ALOGE("vsc wole write thread cancel failed");
+
                 userial_vendor_close();
             }
             break;
@@ -197,6 +212,14 @@ static int op(bt_vendor_opcode_t opcode, void *param)
                 usleep(100000);
                 uint8_t *mode = (uint8_t *) param;
                 retval = hw_lpm_enable(*mode);
+                //start sending vsc after firmware loaded and lpm is set.
+				if (*mode == 1)
+                {
+                    pthread_mutex_lock(&s_vsclock);
+                    wake_signal_sent=1;
+                    pthread_cond_signal(&s_vsccond);
+                    pthread_mutex_unlock(&s_vsclock);
+                }
             }
             break;
 

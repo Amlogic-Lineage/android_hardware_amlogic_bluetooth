@@ -2332,11 +2332,11 @@ static int btmtk_usb_handle_entering_WoBLE_state(void)
 
 	FOPS_MUTEX_LOCK();
 	fstate = btmtk_fops_get_state();
-	if (fstate != BTMTK_FOPS_STATE_OPENED) {
+	/*if (fstate != BTMTK_FOPS_STATE_OPENED) {
 		BTUSB_WARN("%s: fops is not open yet(%d)!, return", __func__, fstate);
 		FOPS_MUTEX_UNLOCK();
 		return 0;
-	}
+	}*/
 	FOPS_MUTEX_UNLOCK();
 
 	/* Power on first if state is power off */
@@ -5016,6 +5016,7 @@ static int btmtk_usb_fops_close(struct inode *inode, struct file *file)
 
 	/* In case no read from stack, and close directly */
 	need_reset_stack = 0;
+	btmtk_usb_unify_woble_suspend(g_data);
 
 	BTUSB_INFO("%s: OK", __func__);
 	return 0;
